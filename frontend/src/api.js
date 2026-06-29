@@ -1,0 +1,48 @@
+import { DEMO, demoApi, demoGetToken, demoSetToken } from './demo';
+
+// En dev, .env define VITE_API_URL=http://localhost:4400.
+// En producción se sirve desde el mismo origen → BASE relativo ('').
+const BASE = import.meta.env.VITE_API_URL || '';
+
+let token = localStorage.getItem('rm_token') || null;
+const realGetToken = () => token;
+function realSetToken(t) {
+  token = t;
+  if (t) localStorage.setItem('rm_token', t);
+  else localStorage.removeItem('rm_token');
+}
+export const getToken = DEMO ? demoGetToken : realGetToken;
+export const setToken = DEMO ? demoSetToken : realSetToken;
+
+async function req(method, path, body) {
+  const res = await fetch(BASE + path, {
+    method,
+    headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: 'Bearer ' + token } : {}) },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (res.status === 401) setToken(null);
+  if (!res.ok) {
+    const e = await res.json().catch(() => ({}));
+    throw new Error(e.error || res.statusText);
+  }
+  return res.status === 204 ? null : res.json();
+}
+
+const realApi = {
+  login: (email, password) => req('POST', '/auth/login', { email, password }),
+  bootstrap: () => req('GET', '/bootstrap'),
+  entryMe: (week) => req('GET', `/entries/me?week=${week}`),
+  saveEntry: (week, data) => req('PUT', `/entries/me?week=${week}`, data),
+  board: (week) => req('GET', `/board?week=${week}`),
+  addUser: (d) => req('POST', '/admin/users', d),
+  updUser: (id, d) => req('PATCH', '/admin/users/' + id, d),
+  delUser: (id) => req('DELETE', '/admin/users/' + id),
+  addArea: (d) => req('POST', '/admin/areas', d),
+  updArea: (id, d) => req('PATCH', '/admin/areas/' + id, d),
+  delArea: (id) => req('DELETE', '/admin/areas/' + id),
+  addTag: (d) => req('POST', '/admin/tags', d),
+  updTag: (id, d) => req('PATCH', '/admin/tags/' + id, d),
+  delTag: (id) => req('DELETE', '/admin/tags/' + id),
+};
+
+export const api = DEMO ? demoApi : realApi;
