@@ -47,7 +47,7 @@
   .seg{display:inline-flex;border:1px solid var(--line-2);border-radius:9px;overflow:hidden}
   .seg button{border:none;background:var(--surface);padding:5px 11px;font-size:12.5px;cursor:pointer;color:var(--muted);border-right:1px solid var(--line)}
   .seg button:last-child{border-right:none}
-  .seg button.on-res{background:var(--eb-green);color:#fff} .seg button.on-sig{background:var(--amber);color:#fff} .seg button.on-can{background:#8a929c;color:#fff}
+  .seg button.on-res{background:var(--eb-green);color:#fff} .seg button.on-sig{background:var(--amber);color:#fff} .seg button.on-pause{background:#5C6B8A;color:#fff} .seg button.on-can{background:#8a929c;color:#fff}
   .todo{display:flex;align-items:center;gap:12px;padding:11px 0;border-top:1px solid var(--line)}
   .todo .txt{flex:1;font-size:14px} .todo.done .txt{color:var(--hint);text-decoration:line-through}
   .cross{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:18px}

@@ -19,7 +19,7 @@ export default function Metricas({ boot, week }) {
   let sinA = 0;
   board.forEach((u) => {
     (u.carry || []).forEach((c) => {
-      if (c.status === 'cancelado') return;
+      if (c.status === 'cancelado' || c.status === 'pausado') return;
       tot++; byT[u.area_id] = (byT[u.area_id] || 0) + 1;
       if (c.status === 'resuelto') { res++; byC[u.area_id] = (byC[u.area_id] || 0) + 1; }
     });

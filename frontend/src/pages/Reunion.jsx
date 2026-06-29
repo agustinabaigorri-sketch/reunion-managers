@@ -52,7 +52,7 @@ export default function Reunion({ boot, week }) {
 
   let tot = 0, res = 0; const pend = [];
   board.forEach((u) => (u.carry || []).forEach((c) => {
-    if (c.status === 'cancelado') return;
+    if (c.status === 'cancelado' || c.status === 'pausado') return;
     tot++;
     if (c.status === 'resuelto') res++;
     else pend.push({ u, c });

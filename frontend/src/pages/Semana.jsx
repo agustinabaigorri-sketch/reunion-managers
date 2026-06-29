@@ -43,7 +43,7 @@ export default function Semana({ boot, week }) {
 
   const me = boot.me;
   const carry = entry.carry || [];
-  const totC = carry.filter((c) => c.status !== 'cancelado').length;
+  const totC = carry.filter((c) => c.status !== 'cancelado' && c.status !== 'pausado').length;
   const resC = carry.filter((c) => c.status === 'resuelto').length;
   const pct = totC ? Math.round((resC / totC) * 100) : 0;
 
@@ -88,6 +88,7 @@ export default function Semana({ boot, week }) {
                 <span className="seg">
                   <button className={c.status === 'resuelto' ? 'on-res' : ''} onClick={() => set('resuelto')}>✓ Resuelto</button>
                   <button className={c.status === 'sigue' ? 'on-sig' : ''} onClick={() => set('sigue')}>↻ Sigue</button>
+                  <button className={c.status === 'pausado' ? 'on-pause' : ''} onClick={() => set('pausado')}>⏸ Pausado</button>
                   <button className={c.status === 'cancelado' ? 'on-can' : ''} onClick={() => set('cancelado')}>✕ Se cayó</button>
                 </span>
               </div>
