@@ -30,8 +30,8 @@ export function isoWeek(date) {
   return { anio, nro, inicio: iso(monday), fin: iso(fin) };
 }
 
-export async function getCurrentWeek() {
-  const { anio, nro, inicio, fin } = isoWeek(new Date());
+export async function ensureWeek(dateObj) {
+  const { anio, nro, inicio, fin } = isoWeek(dateObj);
   await q(
     `insert into weeks(anio, nro, fecha_inicio, fecha_fin) values($1,$2,$3,$4)
      on conflict (anio, nro) do nothing`,
@@ -40,6 +40,8 @@ export async function getCurrentWeek() {
   const { rows } = await q(`select * from weeks where anio=$1 and nro=$2`, [anio, nro]);
   return rows[0];
 }
+
+export const getCurrentWeek = () => ensureWeek(new Date());
 
 export async function weekById(id) {
   const { rows } = await q(`select * from weeks where id=$1`, [id]);

@@ -31,6 +31,7 @@ async function req(method, path, body) {
 const realApi = {
   login: (email, password) => req('POST', '/auth/login', { email, password }),
   bootstrap: () => req('GET', '/bootstrap'),
+  resolveWeek: ({ offset = 0, date } = {}) => req('GET', '/weeks/resolve?' + (date ? 'date=' + date : 'offset=' + offset)),
   entryMe: (week) => req('GET', `/entries/me?week=${week}`),
   saveEntry: (week, data) => req('PUT', `/entries/me?week=${week}`, data),
   board: (week) => req('GET', `/board?week=${week}`),

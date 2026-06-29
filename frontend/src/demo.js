@@ -29,6 +29,7 @@ function seed() {
   const weeks = [
     { id: 1, anio: 2026, nro: 25, fecha_inicio: '2026-06-22', fecha_fin: '2026-06-28' },
     { id: 2, anio: 2026, nro: 26, fecha_inicio: '2026-06-29', fecha_fin: '2026-07-05' },
+    { id: 3, anio: 2026, nro: 27, fecha_inicio: '2026-07-06', fecha_fin: '2026-07-12' },
   ];
   const mk = (tipo, texto, tagsA, need) => ({ id: iid(), tipo, texto, estado: tipo === 'bloqueo' ? 'abierto' : 'na', necesitaDe: need || null, tags: tagsA || [] });
   const cy = (srcTipo, texto, status, need) => ({ srcTipo, texto, status: status || 'pendiente', necesitaDe: need || null, fromItemId: null });
@@ -104,6 +105,11 @@ const wait = (v) => Promise.resolve(clone(v));
 export const demoApi = {
   login: () => wait({ token: 'demo', user: me() }),
   bootstrap: () => wait({ me: me(), areas: store.areas, users: store.users, tags: store.tags, weeks: [...store.weeks].reverse(), currentWeek: weekById(CURRENT) }),
+  resolveWeek: ({ offset = 0, date } = {}) => {
+    if (date) return wait(store.weeks.find((w) => date >= w.fecha_inicio && date <= w.fecha_fin) || weekById(CURRENT));
+    const idx = store.weeks.findIndex((w) => w.id === CURRENT);
+    return wait(store.weeks[idx + offset] || store.weeks[idx]);
+  },
   entryMe: (week) => wait(entryData(me().id, Number(week))),
   saveEntry: (week, data) => {
     const k = me().id + '|' + Number(week);

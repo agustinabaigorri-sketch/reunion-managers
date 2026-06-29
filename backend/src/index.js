@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import express from 'express';
 import cors from 'cors';
-import { pool, q, getCurrentWeek, weekById } from './db.js';
+import { pool, q, getCurrentWeek, ensureWeek, weekById } from './db.js';
 import { login, hashPassword, sanitize, signJwt, auth, requireAdmin } from './auth.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -140,6 +140,19 @@ app.get('/bootstrap', auth, wrap(async (req, res) => {
 }));
 
 app.get('/weeks/current', auth, wrap(async (req, res) => res.json(await getCurrentWeek())));
+
+// Resuelve (creándola si hace falta) la semana actual (offset 0), la siguiente
+// (offset 1) o la que contenga una fecha dada (?date=YYYY-MM-DD).
+app.get('/weeks/resolve', auth, wrap(async (req, res) => {
+  let d;
+  if (req.query.date) {
+    d = new Date(req.query.date + 'T12:00:00Z');
+  } else {
+    d = new Date();
+    d.setUTCDate(d.getUTCDate() + (Number(req.query.offset) || 0) * 7);
+  }
+  res.json(await ensureWeek(d));
+}));
 
 // ---------- mi carga ----------
 app.get('/entries/me', auth, wrap(async (req, res) => {

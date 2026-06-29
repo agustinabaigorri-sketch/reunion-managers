@@ -22,6 +22,16 @@ const fmt = (d) => {
 };
 export const weekLabel = (w) => (w ? `S${w.nro} · ${fmt(w.fecha_inicio)}–${fmt(w.fecha_fin)}` : '');
 
+// Rango laboral lunes a viernes (la semana arranca lunes en fecha_inicio).
+const fmtD = (d) => `${d.getUTCDate()} ${MESES[d.getUTCMonth()]}`;
+export function weekRangeMonFri(w) {
+  if (!w) return '';
+  const mon = new Date(w.fecha_inicio + 'T12:00:00Z');
+  const fri = new Date(mon);
+  fri.setUTCDate(mon.getUTCDate() + 4);
+  return `${fmtD(mon)} – ${fmtD(fri)}`;
+}
+
 // Logo oficial de Educabot (PNG navy con "TECNOLOGÍA EDUCATIVA"). En fondos
 // oscuros (col blanco) se invierte a blanco con un filtro.
 export function Logo({ size = 24, col = 'var(--eb-navy)' }) {

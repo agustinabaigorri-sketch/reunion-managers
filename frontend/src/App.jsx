@@ -1,6 +1,6 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { api, getToken, setToken } from './api';
-import { Logo, weekLabel } from './lib.jsx';
+import { Logo, weekRangeMonFri } from './lib.jsx';
 import Login from './pages/Login.jsx';
 import Semana from './pages/Semana.jsx';
 import Reunion from './pages/Reunion.jsx';
@@ -11,26 +11,30 @@ export default function App() {
   const [authed, setAuthed] = useState(!!getToken());
   const [boot, setBoot] = useState(null);
   const [view, setView] = useState('carga');
-  const [week, setWeek] = useState(null);
+  const [current, setCurrent] = useState(null);
+  const [next, setNext] = useState(null);
+  const [selected, setSelected] = useState(null);
+  const dateRef = useRef(null);
 
   const loadBoot = useCallback(() => {
-    api
-      .bootstrap()
-      .then((b) => {
-        setBoot(b);
-        setWeek((w) => w || b.currentWeek.id);
-      })
-      .catch(() => {
-        setToken(null);
-        setAuthed(false);
-      });
+    api.bootstrap().then(setBoot).catch(() => {
+      setToken(null);
+      setAuthed(false);
+    });
   }, []);
+
   useEffect(() => {
-    if (authed) loadBoot();
+    if (!authed) return;
+    loadBoot();
+    Promise.all([api.resolveWeek({ offset: 0 }), api.resolveWeek({ offset: 1 })]).then(([c, n]) => {
+      setCurrent(c);
+      setNext(n);
+      setSelected((s) => s || c);
+    });
   }, [authed, loadBoot]);
 
   if (!authed) return <Login onLogin={() => setAuthed(true)} />;
-  if (!boot) return <div style={{ padding: 40, color: 'var(--muted)' }}>Cargando…</div>;
+  if (!boot || !selected) return <div style={{ padding: 40, color: 'var(--muted)' }}>Cargando…</div>;
 
   const isAdmin = boot.me.rol === 'admin';
   const tabs = [['carga', 'Mi semana'], ['reunion', 'Vista reunión'], ['metricas', 'Métricas']];
@@ -39,6 +43,15 @@ export default function App() {
     setToken(null);
     setAuthed(false);
     setBoot(null);
+    setSelected(null);
+  };
+  const pickDate = (v) => {
+    if (v) api.resolveWeek({ date: v }).then(setSelected);
+  };
+  const openCal = () => {
+    const el = dateRef.current;
+    if (el?.showPicker) el.showPicker();
+    else el?.focus();
   };
 
   return (
@@ -48,23 +61,25 @@ export default function App() {
           <Logo size={24} />
           <span className="applbl">Reunión semanal</span>
           <div className="spacer" />
-          <div className="ctrl">
-            Semana{' '}
-            <select value={week || ''} onChange={(e) => setWeek(Number(e.target.value))}>
-              {boot.weeks.map((w) => (
-                <option key={w.id} value={w.id}>
-                  {weekLabel(w)}
-                </option>
-              ))}
-            </select>
+          <div className="weeksel">
+            <div className="wtabs">
+              <button className={selected.id === current?.id ? 'active' : ''} onClick={() => setSelected(current)}>Actual</button>
+              <button className={selected.id === next?.id ? 'active' : ''} onClick={() => setSelected(next)}>Siguiente</button>
+            </div>
+            <span className="wrange">{weekRangeMonFri(selected)}</span>
+            <button className="wcal" title="Elegir otra semana" onClick={openCal} aria-label="Elegir otra semana">📅</button>
+            <input
+              ref={dateRef}
+              type="date"
+              onChange={(e) => pickDate(e.target.value)}
+              style={{ position: 'absolute', opacity: 0, width: 1, height: 1, pointerEvents: 'none' }}
+            />
           </div>
           <div className="ctrl" title={boot.me.email}>
             {boot.me.nombre}
             {isAdmin ? ' ★' : ''}
           </div>
-          <button className="btn btn-sm btn-ghost" onClick={logout}>
-            salir
-          </button>
+          <button className="btn btn-sm btn-ghost" onClick={logout}>salir</button>
         </div>
         <div className="nav">
           {tabs.map((t) => (
@@ -75,9 +90,9 @@ export default function App() {
         </div>
       </header>
       <main>
-        {view === 'carga' && <Semana boot={boot} week={week} />}
-        {view === 'reunion' && <Reunion boot={boot} week={week} />}
-        {view === 'metricas' && <Metricas boot={boot} week={week} />}
+        {view === 'carga' && <Semana boot={boot} week={selected.id} />}
+        {view === 'reunion' && <Reunion boot={boot} week={selected.id} />}
+        {view === 'metricas' && <Metricas boot={boot} week={selected.id} />}
         {view === 'admin' && isAdmin && <Admin boot={boot} reload={loadBoot} />}
       </main>
     </>
