@@ -1,7 +1,10 @@
 import pg from 'pg';
 import 'dotenv/config';
 
-const { Pool } = pg;
+const { Pool, types } = pg;
+// Devolver las columnas DATE como 'YYYY-MM-DD' (string) y no como objeto Date,
+// que es lo que asume el front para formatear y comparar semanas.
+types.setTypeParser(1082, (v) => v);
 export const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   // Railway interno no usa SSL. Si conectás a un Postgres externo con SSL, poné PGSSL=true.
