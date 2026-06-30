@@ -9,12 +9,14 @@ export default function Semana({ boot, week }) {
   const L = lookups(boot);
   const [entry, setEntry] = useState(null);
   const [saved, setSaved] = useState('se autoguarda');
+  const [waitMe, setWaitMe] = useState([]);
   const dirty = useRef(false);
 
   useEffect(() => {
     dirty.current = false;
     setEntry(null);
     api.entryMe(week).then((e) => setEntry(normalize(e)));
+    api.alertsMe(week).then((r) => setWaitMe(r.waitMe || [])).catch(() => setWaitMe([]));
   }, [week]);
 
   useEffect(() => {
@@ -43,6 +45,7 @@ export default function Semana({ boot, week }) {
 
   const me = boot.me;
   const carry = entry.carry || [];
+  const iWait = entry.items.filter((it) => it.tipo === 'bloqueo' && it.necesitaDe && it.necesitaDe !== me.area_id);
   const totC = carry.filter((c) => c.status !== 'cancelado' && c.status !== 'pausado').length;
   const resC = carry.filter((c) => c.status === 'resuelto').length;
   const pct = totC ? Math.round((resC / totC) * 100) : 0;
@@ -59,6 +62,25 @@ export default function Semana({ boot, week }) {
         <button className={'btn ' + (entry.submitted ? '' : 'btn-primary')} onClick={() => upd((c) => (c.submitted = !c.submitted))}>
           {entry.submitted ? '✓ enviado · seguir editando' : 'Enviar mi semana'}
         </button>
+      </div>
+
+      <div className="cross" style={{ marginTop: 16 }}>
+        <div className="xcard wait">
+          <div className="xh"><span className="dot d-bloqueo" />Estás esperando a otras áreas</div>
+          {iWait.length === 0
+            ? <div className="xempty">Nada trabado por otros 🎉</div>
+            : iWait.map((it) => (
+                <div className="xrow" key={it._k}>{it.texto || '—'} <span className="muted">→ {L.area(it.necesitaDe).nombre}</span></div>
+              ))}
+        </div>
+        <div className="xcard block">
+          <div className="xh"><span className="dot" style={{ background: 'var(--amber)' }} />Otras áreas te están esperando</div>
+          {waitMe.length === 0
+            ? <div className="xempty">Nadie depende de vos ahora ✓</div>
+            : waitMe.map((x, i) => (
+                <div className="xrow" key={i}>{x.texto} <span className="muted">· {x.nombre}{x.areaNombre ? ` (${x.areaNombre})` : ''}</span></div>
+              ))}
+        </div>
       </div>
 
       {carry.length > 0 && (

@@ -35,6 +35,7 @@ const realApi = {
   entryMe: (week) => req('GET', `/entries/me?week=${week}`),
   saveEntry: (week, data) => req('PUT', `/entries/me?week=${week}`, data),
   board: (week) => req('GET', `/board?week=${week}`),
+  alertsMe: (week) => req('GET', `/alerts/me?week=${week}`),
   addUser: (d) => req('POST', '/admin/users', d),
   updUser: (id, d) => req('PATCH', '/admin/users/' + id, d),
   delUser: (id) => req('DELETE', '/admin/users/' + id),

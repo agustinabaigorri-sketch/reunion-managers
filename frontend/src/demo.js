@@ -126,6 +126,19 @@ export const demoApi = {
     const board = store.users.filter((u) => u.activo).map((u) => ({ user_id: u.id, nombre: u.nombre, ini: u.ini, area_id: u.area_id, ...entryData(u.id, w) }));
     return wait({ week: weekById(w), board });
   },
+  alertsMe: (week) => {
+    const w = Number(week), myArea = me().area_id, myId = me().id, waitMe = [];
+    store.users.forEach((u) => {
+      if (u.id === myId) return;
+      const e = store.entries[u.id + '|' + w];
+      if (!e) return;
+      e.items.forEach((it) => {
+        if (it.tipo === 'bloqueo' && it.estado !== 'resuelto' && it.necesitaDe === myArea)
+          waitMe.push({ texto: it.texto, nombre: u.nombre, areaNombre: (store.areas.find((a) => a.id === u.area_id) || {}).nombre });
+      });
+    });
+    return wait({ waitMe });
+  },
   addUser: (d) => { const id = iid(); store.users.push({ id, email: d.email, nombre: d.nombre || d.email, ini: (d.nombre || d.email).slice(0, 2).toUpperCase(), area_id: d.area_id || null, rol: d.rol || 'manager', activo: true }); persist(); return wait({ ok: true }); },
   updUser: (id, d) => { const u = store.users.find((x) => x.id === Number(id)); if (u) Object.assign(u, Object.fromEntries(Object.entries(d).filter(([, v]) => v != null))); persist(); return wait(u); },
   delUser: (id) => { const u = store.users.find((x) => x.id === Number(id)); if (u) u.activo = false; persist(); return wait({ ok: true }); },

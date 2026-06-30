@@ -181,6 +181,25 @@ app.get('/board', auth, wrap(async (req, res) => {
   res.json({ week, board: out });
 }));
 
+// Alerta liviana para "Mi semana": quién (de otra persona) tiene un bloqueo
+// abierto apuntando a MI área esta semana. Una sola consulta, sin cargar el tablero.
+app.get('/alerts/me', auth, wrap(async (req, res) => {
+  const week = await weekById(Number(req.query.week));
+  if (!week) return res.status(404).json({ error: 'semana inexistente' });
+  const { rows } = await q(
+    `select i.texto, u.nombre, a.nombre as area_nombre
+     from items i
+     join entries e on e.id = i.entry_id
+     join users u on u.id = e.user_id
+     left join areas a on a.id = u.area_id
+     where e.week_id = $1 and i.tipo = 'bloqueo' and i.estado <> 'resuelto'
+       and i.necesita_de_area_id = $2 and u.id <> $3
+     order by u.nombre`,
+    [week.id, req.user.area_id, req.user.id]
+  );
+  res.json({ waitMe: rows.map((r) => ({ texto: r.texto, nombre: r.nombre, areaNombre: r.area_nombre })) });
+}));
+
 app.get('/tags', auth, wrap(async (req, res) => res.json((await q(`select * from tags order by name`)).rows)));
 
 // ---------- administración ----------
