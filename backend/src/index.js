@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import express from 'express';
 import cors from 'cors';
 import { pool, q, getCurrentWeek, ensureWeek, weekById } from './db.js';
-import { login, hashPassword, sanitize, signJwt, auth, requireAdmin } from './auth.js';
+import { login, hashPassword, verifyPassword, sanitize, signJwt, auth, requireAdmin } from './auth.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -127,6 +127,19 @@ app.post('/auth/login', wrap(async (req, res) => {
 }));
 
 app.get('/me', auth, (req, res) => res.json(sanitize(req.user)));
+
+// Cambio de contraseña por el propio usuario (pide la actual por seguridad).
+app.post('/me/password', auth, wrap(async (req, res) => {
+  const { currentPassword, newPassword } = req.body;
+  if (!newPassword || newPassword.length < 6) {
+    return res.status(400).json({ error: 'La nueva contraseña debe tener al menos 6 caracteres' });
+  }
+  if (!req.user.password_hash || !(await verifyPassword(currentPassword, req.user.password_hash))) {
+    return res.status(400).json({ error: 'La contraseña actual no es correcta' });
+  }
+  await q('update users set password_hash=$2 where id=$1', [req.user.id, await hashPassword(newPassword)]);
+  res.json({ ok: true });
+}));
 
 app.get('/bootstrap', auth, wrap(async (req, res) => {
   const [areas, users, tags, weeks, current] = await Promise.all([

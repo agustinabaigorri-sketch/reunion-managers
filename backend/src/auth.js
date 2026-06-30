@@ -7,6 +7,7 @@ export function initials(n) {
 }
 
 export const hashPassword = (p) => bcrypt.hash(p, 10);
+export const verifyPassword = (plain, hash) => bcrypt.compare(plain || '', hash || '');
 
 // No oculta el hash, eso lo hace sanitize() en las respuestas.
 export function sanitize(u) {

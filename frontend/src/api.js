@@ -30,6 +30,7 @@ async function req(method, path, body) {
 
 const realApi = {
   login: (email, password) => req('POST', '/auth/login', { email, password }),
+  changePassword: (currentPassword, newPassword) => req('POST', '/me/password', { currentPassword, newPassword }),
   bootstrap: () => req('GET', '/bootstrap'),
   resolveWeek: ({ offset = 0, date } = {}) => req('GET', '/weeks/resolve?' + (date ? 'date=' + date : 'offset=' + offset)),
   entryMe: (week) => req('GET', `/entries/me?week=${week}`),

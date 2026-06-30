@@ -6,6 +6,7 @@ import Semana from './pages/Semana.jsx';
 import Reunion from './pages/Reunion.jsx';
 import Metricas from './pages/Metricas.jsx';
 import Admin from './pages/Admin.jsx';
+import ChangePassword from './ChangePassword.jsx';
 
 export default function App() {
   const [authed, setAuthed] = useState(!!getToken());
@@ -14,6 +15,7 @@ export default function App() {
   const [current, setCurrent] = useState(null);
   const [next, setNext] = useState(null);
   const [selected, setSelected] = useState(null);
+  const [pwOpen, setPwOpen] = useState(false);
 
   const loadBoot = useCallback(() => {
     api.bootstrap().then(setBoot).catch(() => {
@@ -70,6 +72,7 @@ export default function App() {
             {boot.me.nombre}
             {isAdmin ? ' ★' : ''}
           </div>
+          <button className="btn btn-sm btn-ghost" onClick={() => setPwOpen(true)} title="Cambiar mi contraseña" aria-label="Cambiar mi contraseña">🔑</button>
           <button className="btn btn-sm btn-ghost" onClick={logout}>salir</button>
         </div>
         <div className="nav">
@@ -86,6 +89,7 @@ export default function App() {
         {view === 'metricas' && <Metricas boot={boot} week={selected.id} />}
         {view === 'admin' && isAdmin && <Admin boot={boot} reload={loadBoot} />}
       </main>
+      {pwOpen && <ChangePassword onClose={() => setPwOpen(false)} />}
     </>
   );
 }
