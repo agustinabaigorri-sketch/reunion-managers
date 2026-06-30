@@ -79,7 +79,7 @@ export default function Reunion({ boot, week }) {
     );
   }
   function personCard(u, a) {
-    const cols = [['logro', 'Logros', '#42B3FF'], ['en_curso', 'En curso', '#9B00AF'], ['bloqueo', 'Trabado', '#FF6428']];
+    const cols = [['logro', 'Logros', '#42B3FF'], ['en_curso', 'En curso', '#9B00AF'], ['bloqueo', 'Trabado', '#FF6428'], ['proximo', 'Compromisos', '#FFB800']];
     return (
       <div className="pcard" key={u.user_id}>
         <div className="pcard-h">

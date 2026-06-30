@@ -180,8 +180,9 @@
   .pcard-h .pav{width:44px;height:44px;border-radius:12px;color:#fff;font-weight:700;font-size:15px;display:flex;align-items:center;justify-content:center;flex:none}
   .pcard-h b{font-size:20px;color:var(--eb-navy)}
   .pchip{font-size:12px;padding:2px 9px;border-radius:7px;font-weight:600;background:#eef1f4}
-  .pcols{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
-  @media(max-width:760px){.pcols{grid-template-columns:1fr}}
+  .pcols{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+  @media(max-width:820px){.pcols{grid-template-columns:repeat(2,1fr)}}
+  @media(max-width:520px){.pcols{grid-template-columns:1fr}}
   .pbox{background:#f7f9fb;border:1px solid #e8ebef;border-radius:12px;padding:11px 13px}
   .pboxh{font-size:12.5px;font-weight:700;color:#3a4452;display:flex;align-items:center;gap:7px;margin-bottom:8px;text-transform:uppercase;letter-spacing:.02em}
   .pitem{padding:7px 0;border-top:1px solid #edf0f3;cursor:pointer}
