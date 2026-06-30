@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef, useCallback } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { api, getToken, setToken } from './api';
 import { Logo, weekRangeMonFri } from './lib.jsx';
 import Login from './pages/Login.jsx';
@@ -14,7 +14,6 @@ export default function App() {
   const [current, setCurrent] = useState(null);
   const [next, setNext] = useState(null);
   const [selected, setSelected] = useState(null);
-  const dateRef = useRef(null);
 
   const loadBoot = useCallback(() => {
     api.bootstrap().then(setBoot).catch(() => {
@@ -48,11 +47,6 @@ export default function App() {
   const pickDate = (v) => {
     if (v) api.resolveWeek({ date: v }).then(setSelected);
   };
-  const openCal = () => {
-    const el = dateRef.current;
-    if (el?.showPicker) el.showPicker();
-    else el?.focus();
-  };
 
   return (
     <>
@@ -67,13 +61,10 @@ export default function App() {
               <button className={selected.id === next?.id ? 'active' : ''} onClick={() => setSelected(next)}>Siguiente</button>
             </div>
             <span className="wrange">{weekRangeMonFri(selected)}</span>
-            <button className="wcal" title="Elegir otra semana" onClick={openCal} aria-label="Elegir otra semana">📅</button>
-            <input
-              ref={dateRef}
-              type="date"
-              onChange={(e) => pickDate(e.target.value)}
-              style={{ position: 'absolute', opacity: 0, width: 1, height: 1, pointerEvents: 'none' }}
-            />
+            <label className="wcal" title="Elegir otra semana">
+              <span aria-hidden="true">📅</span>
+              <input type="date" onChange={(e) => pickDate(e.target.value)} aria-label="Elegir otra semana" />
+            </label>
           </div>
           <div className="ctrl" title={boot.me.email}>
             {boot.me.nombre}

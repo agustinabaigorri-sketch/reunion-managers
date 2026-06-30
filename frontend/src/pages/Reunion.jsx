@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { api } from '../api';
-import { lookups, Logo, Ring, weekLabel } from '../lib.jsx';
+import { lookups, Logo, Ring, weekLabel, weekRangeMonFri } from '../lib.jsx';
 
 export default function Reunion({ boot, week }) {
   const L = lookups(boot);
@@ -220,12 +220,12 @@ export default function Reunion({ boot, week }) {
   return (
     <div>
       <div className="reu-cover">
-        <Logo size={30} />
-        <div style={{ flex: 1 }}>
-          <h2 style={{ fontSize: 20 }}>Reunión de managers</h2>
-          <p className="sub">{weekLabel(data.week)} · {cargaron}/{board.length} cargaron · se arma solo</p>
+        <Logo size={28} />
+        <div style={{ flex: '1 1 200px', minWidth: 0 }}>
+          <h2>Reunión de managers</h2>
+          <p className="sub">{weekRangeMonFri(data.week)} · {cargaron}/{board.length} cargaron · se arma solo</p>
         </div>
-        <button className="btn btn-primary" onClick={() => { setSlide(0); setPresent(true); }}>▶ Presentar</button>
+        <button className="btn btn-primary reu-present" onClick={() => { setSlide(0); setPresent(true); }}>▶ Presentar</button>
       </div>
 
       <div className="hero" style={{ marginTop: 14 }}>
