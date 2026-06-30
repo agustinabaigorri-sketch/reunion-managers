@@ -57,6 +57,24 @@
   .seg button{border:none;background:var(--surface);padding:5px 11px;font-size:12.5px;cursor:pointer;color:var(--muted);border-right:1px solid var(--line)}
   .seg button:last-child{border-right:none}
   .seg button.on-res{background:var(--eb-green);color:#fff} .seg button.on-sig{background:var(--amber);color:#fff} .seg button.on-pause{background:#5C6B8A;color:#fff} .seg button.on-can{background:#8a929c;color:#fff}
+  /* botón compacto (mobile) que abre el action sheet */
+  .seg-m{display:none;align-items:center;gap:6px;border:1px solid var(--line-2);background:var(--surface);border-radius:9px;padding:8px 12px;font-size:13px;font-weight:500;cursor:pointer;color:var(--text);white-space:nowrap}
+  .seg-m.st-resuelto{border-color:var(--eb-green);color:var(--eb-green-d)}
+  .seg-m.st-sigue{border-color:var(--amber);color:var(--amber)}
+  .seg-m.st-pausado{border-color:#5C6B8A;color:#5C6B8A}
+  .seg-m.st-cancelado{border-color:#8a929c;color:#6b6b80}
+  .sheet-ov{position:fixed;inset:0;background:rgba(20,16,40,.45);z-index:1000;display:flex;align-items:flex-end}
+  .sheet{background:var(--surface);width:100%;border-radius:18px 18px 0 0;padding:8px 14px calc(16px + env(safe-area-inset-bottom));box-shadow:0 -8px 30px rgba(0,0,0,.22)}
+  .sheet-h{font-size:13px;color:var(--muted);padding:12px 6px 10px;border-bottom:1px solid var(--line);margin-bottom:4px}
+  .sheet-opt{display:flex;align-items:center;gap:11px;width:100%;text-align:left;border:none;background:none;padding:15px 8px;font-size:16px;color:var(--text);cursor:pointer;border-radius:10px}
+  .sheet-opt:active{background:var(--bg)}
+  .sheet-opt.on{font-weight:600}
+  .sheet-chk{margin-left:auto;color:var(--eb-green);font-weight:700}
+  @media(max-width:560px){
+    .todo{flex-wrap:wrap}
+    .seg{display:none}
+    .seg-m{display:inline-flex}
+  }
   .todo{display:flex;align-items:center;gap:12px;padding:11px 0;border-top:1px solid var(--line)}
   .todo .txt{flex:1;font-size:14px} .todo.done .txt{color:var(--hint);text-decoration:line-through}
   .cross{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:18px}

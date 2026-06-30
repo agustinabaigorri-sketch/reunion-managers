@@ -5,11 +5,21 @@ import { TIPOS, lookups, Ring } from '../lib.jsx';
 let cuid = 1;
 const cid = () => 'n' + cuid++;
 
+const SHEET_LABEL = { pendiente: 'Marcar estado', resuelto: '✓ Resuelto', sigue: '↻ Sigue', pausado: '⏸ Pausado', cancelado: '✕ Se cayó' };
+const SHEET_OPTS = [
+  ['resuelto', '✓ Resuelto', 'var(--eb-green)'],
+  ['sigue', '↻ Sigue', 'var(--amber)'],
+  ['pausado', '⏸ Pausado', '#5C6B8A'],
+  ['cancelado', '✕ Se cayó', '#8a929c'],
+  ['pendiente', '○ Sin marcar', 'var(--line-2)'],
+];
+
 export default function Semana({ boot, week }) {
   const L = lookups(boot);
   const [entry, setEntry] = useState(null);
   const [saved, setSaved] = useState('se autoguarda');
   const [waitMe, setWaitMe] = useState([]);
+  const [sheet, setSheet] = useState(null);
   const dirty = useRef(false);
 
   useEffect(() => {
@@ -113,6 +123,7 @@ export default function Semana({ boot, week }) {
                   <button className={c.status === 'pausado' ? 'on-pause' : ''} onClick={() => set('pausado')}>⏸ Pausado</button>
                   <button className={c.status === 'cancelado' ? 'on-can' : ''} onClick={() => set('cancelado')}>✕ Se cayó</button>
                 </span>
+                <button className={'seg-m st-' + c.status} onClick={() => setSheet(i)}>{SHEET_LABEL[c.status] || 'Marcar estado'} ▾</button>
               </div>
             );
           })}
@@ -191,6 +202,25 @@ export default function Semana({ boot, week }) {
           );
         })}
       </div>
+
+      {sheet !== null && carry[sheet] && (
+        <div className="sheet-ov" onClick={() => setSheet(null)}>
+          <div className="sheet" onClick={(e) => e.stopPropagation()}>
+            <div className="sheet-h">¿Cómo quedó? · {carry[sheet].texto || 'Compromiso'}</div>
+            {SHEET_OPTS.map(([st, lbl, col]) => (
+              <button
+                key={st}
+                className={'sheet-opt' + (carry[sheet].status === st ? ' on' : '')}
+                onClick={() => { const i = sheet; upd((x) => { x.carry[i].status = st; }); setSheet(null); }}
+              >
+                <span className="dot" style={{ background: col, width: 10, height: 10 }} />
+                {lbl}
+                {carry[sheet].status === st ? <span className="sheet-chk">✓</span> : null}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
