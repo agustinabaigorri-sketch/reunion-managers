@@ -102,6 +102,28 @@ export const demoListUsers = () => store.users.filter((u) => u.activo);
 
 const wait = (v) => Promise.resolve(clone(v));
 
+function ensureOkr() {
+  if (store.okrObjectives) return;
+  store.okrObjectives = [{ id: 9001, anio: 2026, titulo: 'Ser la plataforma líder de robótica educativa', orden: 0 }];
+  store.okrKrs = [
+    { id: 9101, objective_id: 9001, titulo: 'Pasar de 120 a 300 escuelas activas', unidad: 'escuelas', valor_inicial: 120, valor_objetivo: 300, valor_actual: 165, orden: 0 },
+    { id: 9102, objective_id: 9001, titulo: 'Subir el NPS de 40 a 60', unidad: 'NPS', valor_inicial: 40, valor_objetivo: 60, valor_actual: 48, orden: 1 },
+  ];
+  store.okrAOs = [
+    { id: 9201, kr_id: 9101, area_id: 2, anio: 2026, trimestre: 1, titulo: 'Sumar 50 escuelas nuevas', progreso: 60, orden: 0 },
+    { id: 9202, kr_id: 9101, area_id: 3, anio: 2026, trimestre: 1, titulo: 'Onboarding self-service para escuelas', progreso: 30, orden: 1 },
+    { id: 9203, kr_id: 9101, area_id: 2, anio: 2026, trimestre: 2, titulo: 'Reactivar 30 escuelas dormidas', progreso: 0, orden: 2 },
+  ];
+  persist();
+}
+function okrTreeDemo(anio) {
+  const objs = store.okrObjectives.filter((o) => o.anio === anio).map((o) => ({ ...o }));
+  objs.forEach((o) => {
+    o.krs = store.okrKrs.filter((k) => k.objective_id === o.id).map((k) => ({ ...k, areaObjectives: store.okrAOs.filter((a) => a.kr_id === k.id && a.anio === anio).map((a) => ({ ...a })) }));
+  });
+  return objs;
+}
+
 export const demoApi = {
   login: () => wait({ token: 'demo', user: me() }),
   changePassword: () => wait({ ok: true }),
@@ -149,4 +171,14 @@ export const demoApi = {
   addTag: (d) => { let name = (d.name || '').trim(); if (!name.startsWith('#')) name = '#' + name; name = name.toLowerCase(); if (!store.tags.find((t) => t.name === name)) store.tags.push({ id: iid(), name, color: d.color || '#8a929c' }); persist(); return wait({ ok: true }); },
   updTag: (id, d) => { const t = store.tags.find((x) => x.id === Number(id)); if (t && d.color) t.color = d.color; persist(); return wait(t); },
   delTag: (id) => { store.tags = store.tags.filter((x) => x.id !== Number(id)); persist(); return wait({ ok: true }); },
+  okrGet: (anio) => { ensureOkr(); const a = Number(anio) || 2026; return wait({ anio: a, objectives: okrTreeDemo(a) }); },
+  okrAddObjective: (d) => { ensureOkr(); store.okrObjectives.push({ id: iid(), anio: Number(d.anio) || 2026, titulo: d.titulo || 'Nuevo objetivo', orden: store.okrObjectives.length }); persist(); return wait({ ok: true }); },
+  okrUpdObjective: (id, d) => { ensureOkr(); const o = store.okrObjectives.find((x) => x.id === Number(id)); if (o && d.titulo != null) o.titulo = d.titulo; persist(); return wait(o); },
+  okrDelObjective: (id) => { ensureOkr(); store.okrObjectives = store.okrObjectives.filter((x) => x.id !== Number(id)); store.okrKrs = store.okrKrs.filter((k) => k.objective_id !== Number(id)); persist(); return wait({ ok: true }); },
+  okrAddKr: (d) => { ensureOkr(); store.okrKrs.push({ id: iid(), objective_id: Number(d.objective_id), titulo: d.titulo || '', unidad: d.unidad || '', valor_inicial: +d.valor_inicial || 0, valor_objetivo: +d.valor_objetivo || 100, valor_actual: +d.valor_actual || 0, orden: store.okrKrs.length }); persist(); return wait({ ok: true }); },
+  okrUpdKr: (id, d) => { ensureOkr(); const k = store.okrKrs.find((x) => x.id === Number(id)); if (k) ['titulo', 'unidad', 'valor_inicial', 'valor_objetivo', 'valor_actual'].forEach((f) => { if (d[f] != null) k[f] = f.startsWith('valor') ? +d[f] : d[f]; }); persist(); return wait(k); },
+  okrDelKr: (id) => { ensureOkr(); store.okrKrs = store.okrKrs.filter((x) => x.id !== Number(id)); store.okrAOs = store.okrAOs.filter((a) => a.kr_id !== Number(id)); persist(); return wait({ ok: true }); },
+  okrAddAO: (d) => { ensureOkr(); store.okrAOs.push({ id: iid(), kr_id: Number(d.kr_id), area_id: d.area_id ? Number(d.area_id) : null, anio: Number(d.anio) || 2026, trimestre: Number(d.trimestre) || 1, titulo: d.titulo || '', progreso: Number(d.progreso) || 0, orden: store.okrAOs.length }); persist(); return wait({ ok: true }); },
+  okrUpdAO: (id, d) => { ensureOkr(); const a = store.okrAOs.find((x) => x.id === Number(id)); if (a) ['titulo', 'area_id', 'trimestre', 'progreso', 'kr_id'].forEach((f) => { if (d[f] != null) a[f] = f === 'titulo' ? d[f] : Number(d[f]); }); persist(); return wait(a); },
+  okrDelAO: (id) => { ensureOkr(); store.okrAOs = store.okrAOs.filter((x) => x.id !== Number(id)); persist(); return wait({ ok: true }); },
 };

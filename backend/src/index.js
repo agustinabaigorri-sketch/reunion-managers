@@ -273,6 +273,66 @@ app.delete('/admin/tags/:id', auth, requireAdmin, wrap(async (req, res) => {
   res.json({ ok: true });
 }));
 
+// ---------- OKR / planificación anual (solo admin) ----------
+async function okrTree(anio) {
+  const objs = (await q('select * from okr_objectives where anio=$1 order by orden,id', [anio])).rows;
+  const krs = (await q('select k.* from okr_krs k join okr_objectives o on o.id=k.objective_id where o.anio=$1 order by k.orden,k.id', [anio])).rows;
+  const aos = (await q('select * from okr_area_objectives where anio=$1 order by trimestre,orden,id', [anio])).rows;
+  krs.forEach((k) => (k.areaObjectives = aos.filter((a) => a.kr_id === k.id)));
+  objs.forEach((o) => (o.krs = krs.filter((k) => k.objective_id === o.id)));
+  return objs;
+}
+app.get('/okr', auth, requireAdmin, wrap(async (req, res) => {
+  const anio = Number(req.query.anio) || new Date().getFullYear();
+  res.json({ anio, objectives: await okrTree(anio) });
+}));
+app.post('/okr/objectives', auth, requireAdmin, wrap(async (req, res) => {
+  const { rows } = await q('insert into okr_objectives(anio,titulo) values($1,$2) returning *',
+    [Number(req.body.anio) || new Date().getFullYear(), req.body.titulo || 'Nuevo objetivo']);
+  res.json(rows[0]);
+}));
+app.patch('/okr/objectives/:id', auth, requireAdmin, wrap(async (req, res) => {
+  const { rows } = await q('update okr_objectives set titulo=coalesce($2,titulo) where id=$1 returning *', [req.params.id, req.body.titulo ?? null]);
+  res.json(rows[0]);
+}));
+app.delete('/okr/objectives/:id', auth, requireAdmin, wrap(async (req, res) => { await q('delete from okr_objectives where id=$1', [req.params.id]); res.json({ ok: true }); }));
+
+app.post('/okr/krs', auth, requireAdmin, wrap(async (req, res) => {
+  const b = req.body;
+  const { rows } = await q(
+    'insert into okr_krs(objective_id,titulo,unidad,valor_inicial,valor_objetivo,valor_actual) values($1,$2,$3,$4,$5,$6) returning *',
+    [b.objective_id, b.titulo || '', b.unidad || '', b.valor_inicial ?? 0, b.valor_objetivo ?? 100, b.valor_actual ?? 0]);
+  res.json(rows[0]);
+}));
+app.patch('/okr/krs/:id', auth, requireAdmin, wrap(async (req, res) => {
+  const b = req.body;
+  const { rows } = await q(
+    `update okr_krs set titulo=coalesce($2,titulo), unidad=coalesce($3,unidad),
+       valor_inicial=coalesce($4,valor_inicial), valor_objetivo=coalesce($5,valor_objetivo), valor_actual=coalesce($6,valor_actual)
+     where id=$1 returning *`,
+    [req.params.id, b.titulo ?? null, b.unidad ?? null, b.valor_inicial ?? null, b.valor_objetivo ?? null, b.valor_actual ?? null]);
+  res.json(rows[0]);
+}));
+app.delete('/okr/krs/:id', auth, requireAdmin, wrap(async (req, res) => { await q('delete from okr_krs where id=$1', [req.params.id]); res.json({ ok: true }); }));
+
+app.post('/okr/area-objectives', auth, requireAdmin, wrap(async (req, res) => {
+  const b = req.body;
+  const { rows } = await q(
+    'insert into okr_area_objectives(kr_id,area_id,anio,trimestre,titulo,progreso) values($1,$2,$3,$4,$5,$6) returning *',
+    [b.kr_id, b.area_id || null, Number(b.anio) || new Date().getFullYear(), b.trimestre || 1, b.titulo || '', b.progreso || 0]);
+  res.json(rows[0]);
+}));
+app.patch('/okr/area-objectives/:id', auth, requireAdmin, wrap(async (req, res) => {
+  const b = req.body;
+  const { rows } = await q(
+    `update okr_area_objectives set titulo=coalesce($2,titulo), area_id=coalesce($3,area_id),
+       trimestre=coalesce($4,trimestre), progreso=coalesce($5,progreso), kr_id=coalesce($6,kr_id)
+     where id=$1 returning *`,
+    [req.params.id, b.titulo ?? null, b.area_id ?? null, b.trimestre ?? null, b.progreso ?? null, b.kr_id ?? null]);
+  res.json(rows[0]);
+}));
+app.delete('/okr/area-objectives/:id', auth, requireAdmin, wrap(async (req, res) => { await q('delete from okr_area_objectives where id=$1', [req.params.id]); res.json({ ok: true }); }));
+
 app.get('/health', (req, res) => res.json({ ok: true }));
 
 // En producción, sirve el frontend ya compilado (mismo origen).

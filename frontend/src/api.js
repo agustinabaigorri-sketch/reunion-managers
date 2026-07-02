@@ -46,6 +46,16 @@ const realApi = {
   addTag: (d) => req('POST', '/admin/tags', d),
   updTag: (id, d) => req('PATCH', '/admin/tags/' + id, d),
   delTag: (id) => req('DELETE', '/admin/tags/' + id),
+  okrGet: (anio) => req('GET', '/okr' + (anio ? '?anio=' + anio : '')),
+  okrAddObjective: (d) => req('POST', '/okr/objectives', d),
+  okrUpdObjective: (id, d) => req('PATCH', '/okr/objectives/' + id, d),
+  okrDelObjective: (id) => req('DELETE', '/okr/objectives/' + id),
+  okrAddKr: (d) => req('POST', '/okr/krs', d),
+  okrUpdKr: (id, d) => req('PATCH', '/okr/krs/' + id, d),
+  okrDelKr: (id) => req('DELETE', '/okr/krs/' + id),
+  okrAddAO: (d) => req('POST', '/okr/area-objectives', d),
+  okrUpdAO: (id, d) => req('PATCH', '/okr/area-objectives/' + id, d),
+  okrDelAO: (id) => req('DELETE', '/okr/area-objectives/' + id),
 };
 
 export const api = DEMO ? demoApi : realApi;
