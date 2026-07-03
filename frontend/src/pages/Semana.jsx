@@ -59,6 +59,22 @@ export default function Semana({ boot, week }) {
   };
   const item = (c, id) => c.items.find((x) => x._k === id);
 
+  // Al marcar un compromiso/bloqueo de la semana pasada como "resuelto",
+  // lo autocompleta en Logros (para no escribirlo dos veces). Si se saca, lo quita.
+  const applyCarry = (x, i, st, toggle) => {
+    const cur = x.carry[i];
+    if (!cur) return;
+    const newStatus = toggle && cur.status === st ? 'pendiente' : st;
+    cur.status = newStatus;
+    const key = cur.fromItemId != null ? 'i' + cur.fromItemId : 't' + (cur.texto || '');
+    if (newStatus === 'resuelto') {
+      const exists = x.items.some((it) => it.tipo === 'logro' && (it._fromCarry === key || it.texto === cur.texto));
+      if (!exists) x.items.push({ _k: cid(), tipo: 'logro', texto: cur.texto, estado: 'na', necesitaDe: null, tags: [], areaObjectiveId: null, _fromCarry: key });
+    } else {
+      x.items = x.items.filter((it) => !(it.tipo === 'logro' && it._fromCarry === key));
+    }
+  };
+
   const me = boot.me;
   const carry = entry.carry || [];
   const iWait = entry.items.filter((it) => it.tipo === 'bloqueo' && it.necesitaDe && it.necesitaDe !== me.area_id);
@@ -112,7 +128,7 @@ export default function Semana({ boot, week }) {
           </div>
           {carry.map((c, i) => {
             const done = c.status === 'resuelto' || c.status === 'cancelado';
-            const set = (st) => upd((x) => (x.carry[i].status = x.carry[i].status === st ? 'pendiente' : st));
+            const set = (st) => upd((x) => applyCarry(x, i, st, true));
             return (
               <div className={'todo' + (done ? ' done' : '')} key={i}>
                 <span className={'chip c-' + c.srcTipo}>
@@ -227,7 +243,7 @@ export default function Semana({ boot, week }) {
               <button
                 key={st}
                 className={'sheet-opt' + (carry[sheet].status === st ? ' on' : '')}
-                onClick={() => { const i = sheet; upd((x) => { x.carry[i].status = st; }); setSheet(null); }}
+                onClick={() => { upd((x) => applyCarry(x, sheet, st, false)); setSheet(null); }}
               >
                 <span className="dot" style={{ background: col, width: 10, height: 10 }} />
                 {lbl}
