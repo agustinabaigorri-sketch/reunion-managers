@@ -27,6 +27,7 @@ export default function Planificacion({ boot }) {
     return Math.max(0, Math.min(100, Math.round(((k.valor_actual - k.valor_inicial) / d) * 100)));
   };
   const objPct = (o) => (o.krs.length ? Math.round(o.krs.reduce((s, k) => s + krPct(k), 0) / o.krs.length) : 0);
+  const aoPct = (a) => Math.min(100, Math.round(((a.avances || 0) / Math.max(1, a.meta || 1)) * 100));
 
   const Bar = ({ pct, color, w = 160 }) => (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8, width: w }}>
@@ -106,8 +107,9 @@ export default function Planificacion({ boot }) {
                         </select>
                         <input type="text" defaultValue={a.titulo} placeholder="Objetivo del área…" onBlur={(e) => e.target.value !== a.titulo && run(() => api.okrUpdAO(a.id, { titulo: e.target.value }))} style={{ flex: 1, minWidth: 160, padding: '5px 7px' }} />
                         <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                          <input type="number" min="0" max="100" defaultValue={a.progreso} onBlur={(e) => run(() => api.okrUpdAO(a.id, { progreso: Math.max(0, Math.min(100, +e.target.value)) }))} style={{ width: 56, padding: '5px 7px' }} />
-                          <span className="muted small">%</span>
+                          <span className="muted small">meta</span>
+                          <input type="number" min="1" defaultValue={a.meta} onBlur={(e) => run(() => api.okrUpdAO(a.id, { meta: Math.max(1, +e.target.value) }))} style={{ width: 50, padding: '5px 7px' }} />
+                          <span className="small" style={{ minWidth: 76, textAlign: 'right' }}>{a.avances || 0}/{a.meta} · <b>{aoPct(a)}%</b></span>
                         </div>
                         <button className="btn btn-sm btn-ghost" onClick={() => run(() => api.okrDelAO(a.id))} title="eliminar">×</button>
                       </div>
@@ -127,7 +129,7 @@ export default function Planificacion({ boot }) {
       {mode === 'area' && (() => {
         const a = area(areaSel);
         const mine = areaItems.filter((x) => x.a.area_id === areaSel);
-        const prog = mine.length ? Math.round(mine.reduce((s, x) => s + x.a.progreso, 0) / mine.length) : 0;
+        const prog = mine.length ? Math.round(mine.reduce((s, x) => s + aoPct(x.a), 0) / mine.length) : 0;
         return (
           <div>
             <div className="tcard" style={{ marginTop: 16, display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
@@ -152,11 +154,12 @@ export default function Planificacion({ boot }) {
                     <div className="tcard" key={ao.id} style={{ marginBottom: 10 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
                         <b style={{ flex: 1, minWidth: 200, fontSize: 15 }}>{ao.titulo || <span className="muted">(sin título)</span>}</b>
-                        <Bar pct={Math.max(0, Math.min(100, ao.progreso))} color={a.color} w={150} />
+                        <Bar pct={aoPct(ao)} color={a.color} w={150} />
                       </div>
                       <div style={{ marginTop: 8, fontSize: 12.5, color: 'var(--muted)' }}>
                         <span style={{ color: 'var(--eb-green-d)', background: 'var(--eb-green-bg)', padding: '2px 8px', borderRadius: 6 }}>↗ aporta a KR: {k.titulo || '—'}</span>
                         <span style={{ marginLeft: 8 }}>→ {o.titulo}</span>
+                        <span style={{ marginLeft: 8 }}>· {ao.avances || 0}/{ao.meta} avances de la semana</span>
                       </div>
                     </div>
                   ))}

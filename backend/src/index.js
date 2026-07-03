@@ -28,7 +28,7 @@ async function loadItems(entryId, c = pool) {
   );
   return rows.map((r) => ({
     id: r.id, tipo: r.tipo, texto: r.texto, estado: r.estado,
-    necesitaDe: r.necesita_de_area_id, tags: r.tags,
+    necesitaDe: r.necesita_de_area_id, tags: r.tags, areaObjectiveId: r.area_objective_id,
   }));
 }
 
@@ -88,8 +88,8 @@ async function saveEntry(userId, weekId, body) {
     await c.query(`delete from carry where entry_id=$1`, [entryId]);
     for (const [i, it] of (body.items || []).entries()) {
       const { rows: ir } = await c.query(
-        `insert into items(entry_id,tipo,texto,estado,necesita_de_area_id,orden) values($1,$2,$3,$4,$5,$6) returning id`,
-        [entryId, it.tipo, it.texto || '', it.estado || (it.tipo === 'bloqueo' ? 'abierto' : 'na'), it.necesitaDe || null, i]
+        `insert into items(entry_id,tipo,texto,estado,necesita_de_area_id,orden,area_objective_id) values($1,$2,$3,$4,$5,$6,$7) returning id`,
+        [entryId, it.tipo, it.texto || '', it.estado || (it.tipo === 'bloqueo' ? 'abierto' : 'na'), it.necesitaDe || null, i, it.areaObjectiveId || null]
       );
       for (const tg of it.tags || []) {
         const name = norm(tg);
@@ -278,6 +278,10 @@ async function okrTree(anio) {
   const objs = (await q('select * from okr_objectives where anio=$1 order by orden,id', [anio])).rows;
   const krs = (await q('select k.* from okr_krs k join okr_objectives o on o.id=k.objective_id where o.anio=$1 order by k.orden,k.id', [anio])).rows;
   const aos = (await q('select * from okr_area_objectives where anio=$1 order by trimestre,orden,id', [anio])).rows;
+  const av = (await q('select area_objective_id, count(*)::int n from items where area_objective_id is not null group by area_objective_id')).rows;
+  const avMap = {};
+  av.forEach((r) => (avMap[r.area_objective_id] = r.n));
+  aos.forEach((a) => (a.avances = avMap[a.id] || 0));
   krs.forEach((k) => (k.areaObjectives = aos.filter((a) => a.kr_id === k.id)));
   objs.forEach((o) => (o.krs = krs.filter((k) => k.objective_id === o.id)));
   return objs;
@@ -318,18 +322,28 @@ app.delete('/okr/krs/:id', auth, requireAdmin, wrap(async (req, res) => { await 
 app.post('/okr/area-objectives', auth, requireAdmin, wrap(async (req, res) => {
   const b = req.body;
   const { rows } = await q(
-    'insert into okr_area_objectives(kr_id,area_id,anio,trimestre,titulo,progreso) values($1,$2,$3,$4,$5,$6) returning *',
-    [b.kr_id, b.area_id || null, Number(b.anio) || new Date().getFullYear(), b.trimestre || 1, b.titulo || '', b.progreso || 0]);
+    'insert into okr_area_objectives(kr_id,area_id,anio,trimestre,titulo,meta) values($1,$2,$3,$4,$5,$6) returning *',
+    [b.kr_id, b.area_id || null, Number(b.anio) || new Date().getFullYear(), b.trimestre || 1, b.titulo || '', b.meta || 5]);
   res.json(rows[0]);
 }));
 app.patch('/okr/area-objectives/:id', auth, requireAdmin, wrap(async (req, res) => {
   const b = req.body;
   const { rows } = await q(
     `update okr_area_objectives set titulo=coalesce($2,titulo), area_id=coalesce($3,area_id),
-       trimestre=coalesce($4,trimestre), progreso=coalesce($5,progreso), kr_id=coalesce($6,kr_id)
+       trimestre=coalesce($4,trimestre), meta=coalesce($5,meta), kr_id=coalesce($6,kr_id)
      where id=$1 returning *`,
-    [req.params.id, b.titulo ?? null, b.area_id ?? null, b.trimestre ?? null, b.progreso ?? null, b.kr_id ?? null]);
+    [req.params.id, b.titulo ?? null, b.area_id ?? null, b.trimestre ?? null, b.meta ?? null, b.kr_id ?? null]);
   res.json(rows[0]);
+}));
+
+// Objetivos de área del usuario logueado (para vincular en la carga semanal).
+app.get('/okr/area-objectives/mine', auth, wrap(async (req, res) => {
+  const { rows } = await q(
+    `select ao.id, ao.titulo, ao.trimestre, k.titulo as kr_titulo
+     from okr_area_objectives ao join okr_krs k on k.id = ao.kr_id
+     where ao.area_id = $1 and ao.anio = $2 order by ao.trimestre, ao.id`,
+    [req.user.area_id, new Date().getFullYear()]);
+  res.json(rows);
 }));
 app.delete('/okr/area-objectives/:id', auth, requireAdmin, wrap(async (req, res) => { await q('delete from okr_area_objectives where id=$1', [req.params.id]); res.json({ ok: true }); }));
 

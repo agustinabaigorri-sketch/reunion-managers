@@ -20,7 +20,9 @@ export default function Semana({ boot, week }) {
   const [saved, setSaved] = useState('se autoguarda');
   const [waitMe, setWaitMe] = useState([]);
   const [sheet, setSheet] = useState(null);
+  const [objs, setObjs] = useState([]);
   const dirty = useRef(false);
+  const canLink = boot.me.rol === 'admin' && objs.length > 0;
 
   useEffect(() => {
     dirty.current = false;
@@ -40,6 +42,10 @@ export default function Semana({ boot, week }) {
     }, 700);
     return () => clearTimeout(t);
   }, [entry, week]);
+
+  useEffect(() => {
+    if (boot.me.rol === 'admin') api.okrMine().then(setObjs).catch(() => {});
+  }, [boot.me.rol]);
 
   if (!entry) return <div style={{ color: 'var(--muted)' }}>Cargando…</div>;
 
@@ -188,6 +194,16 @@ export default function Semana({ boot, week }) {
                         }}
                       />
                     </div>
+                    {canLink && (
+                      <select
+                        value={it.areaObjectiveId || ''}
+                        onChange={(e) => upd((c) => (item(c, it._k).areaObjectiveId = e.target.value ? Number(e.target.value) : null))}
+                        style={{ marginTop: 6, fontSize: 12, padding: '4px 7px', maxWidth: '100%', color: it.areaObjectiveId ? 'var(--eb-green-d)' : 'var(--muted)', borderColor: it.areaObjectiveId ? 'var(--eb-green)' : 'var(--line-2)' }}
+                      >
+                        <option value="">↗ vincular a objetivo…</option>
+                        {objs.map((o) => <option key={o.id} value={o.id}>Q{o.trimestre} · {o.titulo}</option>)}
+                      </select>
+                    )}
                   </div>
                   <button className="btn btn-sm btn-ghost" onClick={() => upd((c) => (c.items = c.items.filter((x) => x._k !== it._k)))} title="eliminar">×</button>
                 </div>
@@ -234,14 +250,14 @@ function norm(v) {
 function normalize(e) {
   return {
     submitted: !!e.submitted,
-    items: (e.items || []).map((it) => ({ _k: cid(), tipo: it.tipo, texto: it.texto || '', estado: it.estado || 'na', necesitaDe: it.necesitaDe || null, tags: it.tags || [] })),
+    items: (e.items || []).map((it) => ({ _k: cid(), tipo: it.tipo, texto: it.texto || '', estado: it.estado || 'na', necesitaDe: it.necesitaDe || null, tags: it.tags || [], areaObjectiveId: it.areaObjectiveId || null })),
     carry: (e.carry || []).map((c) => ({ ...c })),
   };
 }
 function serialize(e) {
   return {
     submitted: e.submitted,
-    items: e.items.map((it) => ({ tipo: it.tipo, texto: it.texto, estado: it.estado, necesitaDe: it.necesitaDe, tags: it.tags })),
+    items: e.items.map((it) => ({ tipo: it.tipo, texto: it.texto, estado: it.estado, necesitaDe: it.necesitaDe, tags: it.tags, areaObjectiveId: it.areaObjectiveId || null })),
     carry: e.carry.map((c) => ({ srcTipo: c.srcTipo, texto: c.texto, status: c.status, necesitaDe: c.necesitaDe, fromItemId: c.fromItemId })),
   };
 }
