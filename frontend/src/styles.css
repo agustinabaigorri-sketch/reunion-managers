@@ -79,6 +79,10 @@
   .task-list{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);overflow:hidden}
   .task-row{display:flex;align-items:center;gap:11px;padding:11px 14px;border-top:1px solid var(--line);flex-wrap:wrap}
   .task-list .task-row:first-child{border-top:none}
+  .task-detail{display:flex;gap:14px;flex-wrap:wrap;align-items:flex-start;padding:2px 14px 14px 40px;background:var(--surface)}
+  .task-detail label{font-size:12px;color:var(--muted);display:flex;flex-direction:column;gap:4px}
+  .task-detail input[type=date]{padding:6px 8px;border:1px solid var(--line-2);border-radius:8px;background:var(--surface)}
+  .task-detail textarea{flex:1;min-width:220px;min-height:44px;padding:7px 9px;border:1px solid var(--line-2);border-radius:8px;resize:vertical;font-size:13.5px}
   @media(max-width:560px){
     .todo{flex-wrap:wrap}
     .seg{display:none}

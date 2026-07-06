@@ -3,11 +3,14 @@ import { api } from '../api';
 
 const PRIO = { alta: ['#993c1d', '#FFEAE0'], media: ['#7a5a00', '#FFF3D6'], baja: ['#54606e', '#EEF1F4'] };
 const RANK = { alta: 0, media: 1, baja: 2 };
+const MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+const fmtDate = (d) => { const [, m, day] = d.split('-'); return `${+day} ${MESES[+m - 1]}`; };
 
 export default function MisTareas() {
   const [tasks, setTasks] = useState(null);
   const [busy, setBusy] = useState(false);
   const [nt, setNt] = useState({ titulo: '', prioridad: 'media' });
+  const [openId, setOpenId] = useState(null);
 
   const load = () => api.tasksGet().then(setTasks);
   useEffect(() => { load(); }, []);
@@ -21,6 +24,13 @@ export default function MisTareas() {
   const backlog = tasks.filter((t) => t.estado === 'pendiente' && !t.en_semana).sort(sortP);
   const hechas = tasks.filter((t) => t.estado === 'hecho').sort((a, b) => new Date(b.completed_at || 0) - new Date(a.completed_at || 0));
 
+  const venceInfo = (v) => {
+    const days = Math.ceil((new Date(v + 'T12:00:00Z').getTime() - Date.now()) / 86400000);
+    if (days < 0) return { label: 'venció ' + fmtDate(v), color: '#C0392B', bg: '#FBE9E6' };
+    if (days <= 3) return { label: 'vence ' + fmtDate(v), color: '#B5780B', bg: '#FFF3D6' };
+    return { label: 'vence ' + fmtDate(v), color: '#1F86D6', bg: '#E6F1FB' };
+  };
+
   const Chip = ({ p }) => <span className="chip" style={{ background: PRIO[p][1], color: PRIO[p][0] }}>{p}</span>;
   const AgeEl = ({ c }) => {
     const d = age(c);
@@ -28,28 +38,45 @@ export default function MisTareas() {
     return <span style={{ fontSize: 11.5, color: col, whiteSpace: 'nowrap' }}>{d > 14 ? '⚠ ' : ''}hace {d} día{d === 1 ? '' : 's'}</span>;
   };
 
-  const Row = ({ t, inWeek }) => (
-    <div className="task-row">
-      <input type="checkbox" checked={t.estado === 'hecho'} onChange={(e) => run(() => api.taskUpd(t.id, { estado: e.target.checked ? 'hecho' : 'pendiente' }))} />
-      <span style={{ flex: 1, minWidth: 160, textDecoration: t.estado === 'hecho' ? 'line-through' : 'none', color: t.estado === 'hecho' ? 'var(--hint)' : 'var(--text)' }}>{t.titulo}</span>
-      {t.estado === 'pendiente' && <AgeEl c={t.created_at} />}
-      <Chip p={t.prioridad} />
-      {t.estado === 'pendiente' && (inWeek
-        ? <button className="btn btn-sm btn-ghost" onClick={() => run(() => api.taskUpd(t.id, { en_semana: false }))} title="volver al backlog">← backlog</button>
-        : <button className="btn btn-sm btn-ghost" onClick={() => run(() => api.taskUpd(t.id, { en_semana: true }))} title="mover a esta semana">→ esta semana</button>)}
-      {t.estado === 'hecho' && (t.enviada_logro
-        ? <span className="chip" style={{ background: 'var(--eb-green-bg)', color: 'var(--eb-green-d)' }}>✓ en Logros</span>
-        : <button className="btn btn-sm" onClick={() => run(() => api.taskToLogro(t.id))} title="mandar a los Logros de la semana">→ Logros</button>)}
-      <button className="btn btn-sm btn-ghost" onClick={() => run(() => api.taskDel(t.id))} title="eliminar">×</button>
-    </div>
-  );
+  const Row = ({ t, inWeek }) => {
+    const open = openId === t.id;
+    const vi = t.vence ? venceInfo(t.vence) : null;
+    return (
+      <React.Fragment>
+        <div className="task-row">
+          <input type="checkbox" checked={t.estado === 'hecho'} onChange={(e) => run(() => api.taskUpd(t.id, { estado: e.target.checked ? 'hecho' : 'pendiente' }))} />
+          <span style={{ flex: 1, minWidth: 150, textDecoration: t.estado === 'hecho' ? 'line-through' : 'none', color: t.estado === 'hecho' ? 'var(--hint)' : 'var(--text)' }}>{t.titulo}</span>
+          {t.nota ? <span title={t.nota} style={{ fontSize: 13, cursor: 'help' }}>📝</span> : null}
+          {vi && <span className="chip" style={{ background: vi.bg, color: vi.color }}>{vi.label}</span>}
+          {t.estado === 'pendiente' && <AgeEl c={t.created_at} />}
+          <Chip p={t.prioridad} />
+          <button className="btn btn-sm btn-ghost" onClick={() => setOpenId(open ? null : t.id)} title="fecha y detalle">{open ? '▲' : '⋯'}</button>
+          {t.estado === 'pendiente' && (inWeek
+            ? <button className="btn btn-sm btn-ghost" onClick={() => run(() => api.taskUpd(t.id, { en_semana: false }))} title="volver al backlog">← backlog</button>
+            : <button className="btn btn-sm btn-ghost" onClick={() => run(() => api.taskUpd(t.id, { en_semana: true }))} title="mover a esta semana">→ esta semana</button>)}
+          {t.estado === 'hecho' && (t.enviada_logro
+            ? <span className="chip" style={{ background: 'var(--eb-green-bg)', color: 'var(--eb-green-d)' }}>✓ en Logros</span>
+            : <button className="btn btn-sm" onClick={() => run(() => api.taskToLogro(t.id))} title="mandar a los Logros de la semana">→ Logros</button>)}
+          <button className="btn btn-sm btn-ghost" onClick={() => run(() => api.taskDel(t.id))} title="eliminar">×</button>
+        </div>
+        {open && (
+          <div className="task-detail">
+            <label>Vence
+              <input type="date" defaultValue={t.vence || ''} onChange={(e) => run(() => api.taskUpd(t.id, { vence: e.target.value || null }))} />
+            </label>
+            <textarea placeholder="¿De qué es? Ej: necesito presupuesto de infraestructura…" defaultValue={t.nota || ''} onBlur={(e) => e.target.value !== (t.nota || '') && run(() => api.taskUpd(t.id, { nota: e.target.value }))} />
+          </div>
+        )}
+      </React.Fragment>
+    );
+  };
 
   const add = () => { if (nt.titulo.trim()) { run(() => api.taskAdd({ titulo: nt.titulo.trim(), prioridad: nt.prioridad })); setNt({ titulo: '', prioridad: 'media' }); } };
 
   return (
     <div style={{ opacity: busy ? 0.6 : 1 }}>
       <h2>Mis tareas</h2>
-      <p className="sub">Tu planificador semanal. Al completar una tarea podés mandarla a los Logros de tu semana. Solo lo ves vos.</p>
+      <p className="sub">Tu planificador semanal. Poné fecha de vencimiento y un detalle si hace falta; al completar podés mandarla a los Logros de tu semana. Solo lo ves vos.</p>
 
       <div style={{ display: 'flex', gap: 8, margin: '16px 0 6px', flexWrap: 'wrap' }}>
         <input type="text" placeholder="Agregar tarea…" value={nt.titulo} onChange={(e) => setNt({ ...nt, titulo: e.target.value })} onKeyDown={(e) => e.key === 'Enter' && add()} style={{ flex: 1, minWidth: 200 }} />
