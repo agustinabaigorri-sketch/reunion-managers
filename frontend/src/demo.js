@@ -102,6 +102,21 @@ export const demoListUsers = () => store.users.filter((u) => u.activo);
 
 const wait = (v) => Promise.resolve(clone(v));
 
+function ensureTasks() {
+  if (store.tasks) return;
+  const now = Date.now();
+  const day = 86400000;
+  const t = (titulo, prioridad, en_semana, ageDays) => ({ id: iid(), user_id: 1, titulo, prioridad, estado: 'pendiente', en_semana: !!en_semana, enviada_logro: false, created_at: new Date(now - ageDays * day).toISOString(), completed_at: null, orden: 0 });
+  store.tasks = [
+    t('Preparar propuesta Santa Fe', 'alta', true, 3),
+    t('Revisar cierre de mayo de las 3 empresas', 'media', true, 6),
+    t('Definir presupuesto y estructura de costos por proyecto', 'alta', false, 20),
+    t('Seguimiento del agente de licitaciones', 'media', false, 12),
+    t('Reunión con proveedor de transporte', 'baja', false, 5),
+  ];
+  persist();
+}
+
 function ensureOkr() {
   if (store.okrObjectives) return;
   store.okrObjectives = [{ id: 9001, anio: 2026, titulo: 'Ser la plataforma líder de robótica educativa', orden: 0 }];
@@ -188,4 +203,9 @@ export const demoApi = {
   okrUpdAO: (id, d) => { ensureOkr(); const a = store.okrAOs.find((x) => x.id === Number(id)); if (a) ['titulo', 'area_id', 'trimestre', 'meta', 'kr_id'].forEach((f) => { if (d[f] != null) a[f] = f === 'titulo' ? d[f] : Number(d[f]); }); persist(); return wait(a); },
   okrDelAO: (id) => { ensureOkr(); store.okrAOs = store.okrAOs.filter((x) => x.id !== Number(id)); persist(); return wait({ ok: true }); },
   okrMine: () => { ensureOkr(); const u = me(); return wait(store.okrAOs.filter((a) => a.area_id === u.area_id).map((a) => ({ id: a.id, titulo: a.titulo, trimestre: a.trimestre, kr_titulo: (store.okrKrs.find((k) => k.id === a.kr_id) || {}).titulo }))); },
+  tasksGet: () => { ensureTasks(); const uid = me().id; return wait(store.tasks.filter((t) => t.user_id === uid)); },
+  taskAdd: (d) => { ensureTasks(); store.tasks.push({ id: iid(), user_id: me().id, titulo: d.titulo || '', prioridad: d.prioridad || 'media', estado: 'pendiente', en_semana: !!d.en_semana, enviada_logro: false, created_at: new Date().toISOString(), completed_at: null, orden: 0 }); persist(); return wait({ ok: true }); },
+  taskUpd: (id, d) => { ensureTasks(); const t = store.tasks.find((x) => x.id === Number(id)); if (t) { ['titulo', 'prioridad', 'estado', 'en_semana'].forEach((f) => { if (d[f] != null) t[f] = d[f]; }); if (d.estado === 'hecho') t.completed_at = new Date().toISOString(); if (d.estado === 'pendiente') t.completed_at = null; } persist(); return wait(t); },
+  taskDel: (id) => { ensureTasks(); store.tasks = store.tasks.filter((x) => x.id !== Number(id)); persist(); return wait({ ok: true }); },
+  taskToLogro: (id) => { ensureTasks(); const t = store.tasks.find((x) => x.id === Number(id)); if (t) { t.enviada_logro = true; const k = me().id + '|' + CURRENT; const e = store.entries[k] || (store.entries[k] = { submitted: false, items: [], carry: undefined }); if (!e.items.some((it) => it.tipo === 'logro' && it.texto === t.titulo)) e.items.push({ id: iid(), tipo: 'logro', texto: t.titulo, estado: 'na', necesitaDe: null, tags: [], areaObjectiveId: null }); } persist(); return wait({ ok: true }); },
 };

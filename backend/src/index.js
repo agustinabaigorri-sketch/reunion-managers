@@ -347,6 +347,51 @@ app.get('/okr/area-objectives/mine', auth, wrap(async (req, res) => {
 }));
 app.delete('/okr/area-objectives/:id', auth, requireAdmin, wrap(async (req, res) => { await q('delete from okr_area_objectives where id=$1', [req.params.id]); res.json({ ok: true }); }));
 
+// ---------- Planificador personal de tareas ----------
+app.get('/tasks', auth, wrap(async (req, res) => {
+  const { rows } = await q('select * from tasks where user_id=$1 order by en_semana desc, created_at asc', [req.user.id]);
+  res.json(rows);
+}));
+app.post('/tasks', auth, wrap(async (req, res) => {
+  const { rows } = await q(
+    'insert into tasks(user_id,titulo,prioridad,en_semana) values($1,$2,$3,$4) returning *',
+    [req.user.id, req.body.titulo || '', req.body.prioridad || 'media', !!req.body.en_semana]);
+  res.json(rows[0]);
+}));
+app.patch('/tasks/:id', auth, wrap(async (req, res) => {
+  const b = req.body;
+  const { rows } = await q(
+    `update tasks set titulo=coalesce($3,titulo), prioridad=coalesce($4,prioridad),
+       estado=coalesce($5,estado), en_semana=coalesce($6,en_semana),
+       completed_at = case when $5='hecho' then now() when $5='pendiente' then null else completed_at end
+     where id=$1 and user_id=$2 returning *`,
+    [req.params.id, req.user.id, b.titulo ?? null, b.prioridad ?? null, b.estado ?? null, b.en_semana ?? null]);
+  res.json(rows[0]);
+}));
+app.delete('/tasks/:id', auth, wrap(async (req, res) => {
+  await q('delete from tasks where id=$1 and user_id=$2', [req.params.id, req.user.id]);
+  res.json({ ok: true });
+}));
+// Manda la tarea a los Logros de la semana actual (dedupe por texto).
+app.post('/tasks/:id/to-logro', auth, wrap(async (req, res) => {
+  const { rows: tr } = await q('select * from tasks where id=$1 and user_id=$2', [req.params.id, req.user.id]);
+  const t = tr[0];
+  if (!t) return res.status(404).json({ error: 'tarea no encontrada' });
+  const week = await getCurrentWeek();
+  const { rows: er } = await q(
+    `insert into entries(user_id,week_id,submitted,updated_at) values($1,$2,false,now())
+     on conflict (user_id,week_id) do update set updated_at=now() returning id`,
+    [req.user.id, week.id]);
+  const entryId = er[0].id;
+  const { rows: ex } = await q(`select 1 from items where entry_id=$1 and tipo='logro' and texto=$2 limit 1`, [entryId, t.titulo]);
+  if (!ex[0]) {
+    const { rows: mx } = await q(`select coalesce(max(orden),-1)+1 o from items where entry_id=$1`, [entryId]);
+    await q(`insert into items(entry_id,tipo,texto,estado,orden) values($1,'logro',$2,'na',$3)`, [entryId, t.titulo, mx[0].o]);
+  }
+  await q('update tasks set enviada_logro=true where id=$1', [t.id]);
+  res.json({ ok: true, week });
+}));
+
 app.get('/health', (req, res) => res.json({ ok: true }));
 
 // En producción, sirve el frontend ya compilado (mismo origen).

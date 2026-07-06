@@ -57,6 +57,11 @@ const realApi = {
   okrUpdAO: (id, d) => req('PATCH', '/okr/area-objectives/' + id, d),
   okrDelAO: (id) => req('DELETE', '/okr/area-objectives/' + id),
   okrMine: () => req('GET', '/okr/area-objectives/mine'),
+  tasksGet: () => req('GET', '/tasks'),
+  taskAdd: (d) => req('POST', '/tasks', d),
+  taskUpd: (id, d) => req('PATCH', '/tasks/' + id, d),
+  taskDel: (id) => req('DELETE', '/tasks/' + id),
+  taskToLogro: (id) => req('POST', '/tasks/' + id + '/to-logro'),
 };
 
 export const api = DEMO ? demoApi : realApi;

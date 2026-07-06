@@ -7,6 +7,7 @@ import Reunion from './pages/Reunion.jsx';
 import Metricas from './pages/Metricas.jsx';
 import Admin from './pages/Admin.jsx';
 import Planificacion from './pages/Planificacion.jsx';
+import MisTareas from './pages/MisTareas.jsx';
 import ChangePassword from './ChangePassword.jsx';
 
 export default function App() {
@@ -42,7 +43,7 @@ export default function App() {
 
   const isAdmin = boot.me.rol === 'admin';
   const tabs = [['carga', 'Mi semana'], ['reunion', 'Vista reunión'], ['metricas', 'Métricas']];
-  if (isAdmin) tabs.push(['okr', 'Planificación'], ['admin', 'Administración']);
+  if (isAdmin) tabs.push(['tareas', 'Mis tareas'], ['okr', 'Planificación'], ['admin', 'Administración']);
   const logout = () => {
     setToken(null);
     setAuthed(false);
@@ -91,6 +92,7 @@ export default function App() {
         {view === 'carga' && <Semana boot={boot} week={selected.id} />}
         {view === 'reunion' && <Reunion boot={boot} week={selected.id} />}
         {view === 'metricas' && <Metricas boot={boot} week={selected.id} />}
+        {view === 'tareas' && isAdmin && <MisTareas />}
         {view === 'okr' && isAdmin && <Planificacion boot={boot} />}
         {view === 'admin' && isAdmin && <Admin boot={boot} reload={loadBoot} />}
       </main>
