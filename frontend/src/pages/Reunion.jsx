@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { api } from '../api';
 import { lookups, Logo, Ring, weekLabel, weekRangeMonFri } from '../lib.jsx';
+import PresTimer from '../PresTimer.jsx';
 
 export default function Reunion({ boot, week }) {
   const L = lookups(boot);
@@ -20,6 +21,7 @@ export default function Reunion({ boot, week }) {
   useEffect(() => {
     if (!present) return;
     const h = (e) => {
+      if (['INPUT', 'SELECT', 'TEXTAREA'].includes(e.target?.tagName)) return;
       if (e.key === 'ArrowRight' || e.key === ' ') { e.preventDefault(); setSlide((s) => Math.min(s + 1, slidesRef.current.length - 1)); }
       else if (e.key === 'ArrowLeft') setSlide((s) => Math.max(s - 1, 0));
       else if (e.key === 'Escape') setPresent(false);
@@ -30,6 +32,7 @@ export default function Reunion({ boot, week }) {
 
   if (!data) return <div style={{ color: 'var(--muted)' }}>Cargando…</div>;
   const board = data.board;
+  const presenters = board.filter((u) => u.presenta !== false);
 
   const toggleExp = (id) => setExp((e) => (e.includes(id) ? e.filter((x) => x !== id) : [...e, id]));
   const itemsByTag = (tg) => {
@@ -199,8 +202,11 @@ export default function Reunion({ boot, week }) {
     return (
       <div className={'present t-' + sl.t}>
         <div className="ptop">
-          <Logo size={20} col={sl.t === 'light' ? 'var(--eb-navy)' : '#fff'} />
-          <span>Modo presentación · {weekLabel(data.week)}</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <Logo size={20} col={sl.t === 'light' ? 'var(--eb-navy)' : '#fff'} />
+            <span style={{ fontSize: 13, opacity: 0.65 }}>{weekLabel(data.week)}</span>
+          </div>
+          <PresTimer presentersCount={presenters.length} />
           <button className="navbtn" onClick={() => setPresent(false)}>✕ salir (Esc)</button>
         </div>
         <div className="pbody">{sl.node}</div>

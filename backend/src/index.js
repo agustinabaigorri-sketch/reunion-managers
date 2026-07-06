@@ -144,7 +144,7 @@ app.post('/me/password', auth, wrap(async (req, res) => {
 app.get('/bootstrap', auth, wrap(async (req, res) => {
   const [areas, users, tags, weeks, current] = await Promise.all([
     q(`select * from areas order by orden, id`),
-    q(`select id,email,nombre,ini,area_id,rol,activo from users order by id`),
+    q(`select id,email,nombre,ini,area_id,rol,activo,presenta from users order by id`),
     q(`select * from tags order by name`),
     q(`select * from weeks order by fecha_inicio desc limit 12`),
     getCurrentWeek(),
@@ -185,11 +185,11 @@ app.put('/entries/me', auth, wrap(async (req, res) => {
 app.get('/board', auth, wrap(async (req, res) => {
   const week = await weekById(Number(req.query.week));
   if (!week) return res.status(404).json({ error: 'semana inexistente' });
-  const { rows: users } = await q(`select id,nombre,ini,area_id from users where activo=true order by id`);
+  const { rows: users } = await q(`select id,nombre,ini,area_id,presenta from users where activo=true order by id`);
   const out = [];
   for (const u of users) {
     const d = await getEntryData(u.id, week);
-    out.push({ user_id: u.id, nombre: u.nombre, ini: u.ini, area_id: u.area_id, ...d });
+    out.push({ user_id: u.id, nombre: u.nombre, ini: u.ini, area_id: u.area_id, presenta: u.presenta, ...d });
   }
   res.json({ week, board: out });
 }));
@@ -232,8 +232,8 @@ app.patch('/admin/users/:id', auth, requireAdmin, wrap(async (req, res) => {
   const ph = f.password ? await hashPassword(f.password) : null;
   const { rows } = await q(
     `update users set nombre=coalesce($2,nombre), area_id=coalesce($3,area_id), rol=coalesce($4,rol),
-       activo=coalesce($5,activo), password_hash=coalesce($6,password_hash) where id=$1 returning *`,
-    [req.params.id, f.nombre ?? null, f.area_id ?? null, f.rol ?? null, f.activo ?? null, ph]
+       activo=coalesce($5,activo), password_hash=coalesce($6,password_hash), presenta=coalesce($7,presenta) where id=$1 returning *`,
+    [req.params.id, f.nombre ?? null, f.area_id ?? null, f.rol ?? null, f.activo ?? null, ph, f.presenta ?? null]
   );
   res.json(sanitize(rows[0]));
 }));

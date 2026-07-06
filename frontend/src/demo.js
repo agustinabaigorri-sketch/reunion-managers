@@ -152,7 +152,7 @@ export const demoApi = {
   },
   board: (week) => {
     const w = Number(week);
-    const board = store.users.filter((u) => u.activo).map((u) => ({ user_id: u.id, nombre: u.nombre, ini: u.ini, area_id: u.area_id, ...entryData(u.id, w) }));
+    const board = store.users.filter((u) => u.activo).map((u) => ({ user_id: u.id, nombre: u.nombre, ini: u.ini, area_id: u.area_id, presenta: u.presenta, ...entryData(u.id, w) }));
     return wait({ week: weekById(w), board });
   },
   alertsMe: (week) => {

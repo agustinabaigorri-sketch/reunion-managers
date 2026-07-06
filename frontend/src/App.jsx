@@ -13,6 +13,7 @@ export default function App() {
   const [authed, setAuthed] = useState(!!getToken());
   const [boot, setBoot] = useState(null);
   const [view, setView] = useState('carga');
+  const [prev, setPrev] = useState(null);
   const [current, setCurrent] = useState(null);
   const [next, setNext] = useState(null);
   const [selected, setSelected] = useState(null);
@@ -28,7 +29,8 @@ export default function App() {
   useEffect(() => {
     if (!authed) return;
     loadBoot();
-    Promise.all([api.resolveWeek({ offset: 0 }), api.resolveWeek({ offset: 1 })]).then(([c, n]) => {
+    Promise.all([api.resolveWeek({ offset: -1 }), api.resolveWeek({ offset: 0 }), api.resolveWeek({ offset: 1 })]).then(([p, c, n]) => {
+      setPrev(p);
       setCurrent(c);
       setNext(n);
       setSelected((s) => s || c);
@@ -60,6 +62,7 @@ export default function App() {
           <div className="spacer" />
           <div className="weeksel">
             <div className="wtabs">
+              <button className={selected.id === prev?.id ? 'active' : ''} onClick={() => setSelected(prev)}>Anterior</button>
               <button className={selected.id === current?.id ? 'active' : ''} onClick={() => setSelected(current)}>Actual</button>
               <button className={selected.id === next?.id ? 'active' : ''} onClick={() => setSelected(next)}>Siguiente</button>
             </div>

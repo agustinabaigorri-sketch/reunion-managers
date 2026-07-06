@@ -19,7 +19,7 @@ export default function Admin({ boot, reload }) {
       <div className="tcard" style={{ marginTop: 16 }}>
         <div className="tcard-h">Usuarios <span className="count">{boot.users.filter((u) => u.activo).length}</span></div>
         <table className="adm">
-          <thead><tr><th>Nombre</th><th>Email</th><th>Área</th><th>Rol</th><th /></tr></thead>
+          <thead><tr><th>Nombre</th><th>Email</th><th>Área</th><th>Rol</th><th>Presenta</th><th /></tr></thead>
           <tbody>
             {boot.users.filter((u) => u.activo).map((u) => (
               <tr key={u.id}>
@@ -36,6 +36,9 @@ export default function Admin({ boot, reload }) {
                     <option value="manager">manager</option>
                     <option value="admin">admin</option>
                   </select>
+                </td>
+                <td style={{ textAlign: 'center' }}>
+                  <input type="checkbox" checked={u.presenta !== false} onChange={(e) => run(() => api.updUser(u.id, { presenta: e.target.checked }))} title="¿Presenta en la reunión?" />
                 </td>
                 <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
                   <button className="btn btn-sm btn-ghost" onClick={() => { const p = prompt('Nueva contraseña para ' + u.nombre); if (p) run(() => api.updUser(u.id, { password: p })); }} title="cambiar contraseña">🔑</button>
