@@ -31,7 +31,18 @@ export default function MisTareas() {
     return { label: 'vence ' + fmtDate(v), color: '#1F86D6', bg: '#E6F1FB' };
   };
 
-  const Chip = ({ p }) => <span className="chip" style={{ background: PRIO[p][1], color: PRIO[p][0] }}>{p}</span>;
+  const PrioSel = ({ t }) => (
+    <select
+      value={t.prioridad}
+      onChange={(e) => run(() => api.taskUpd(t.id, { prioridad: e.target.value }))}
+      title="cambiar prioridad"
+      style={{ background: PRIO[t.prioridad][1], color: PRIO[t.prioridad][0], border: 'none', borderRadius: 7, padding: '3px 6px', fontSize: 11.5, fontWeight: 600, cursor: 'pointer' }}
+    >
+      <option value="alta">alta</option>
+      <option value="media">media</option>
+      <option value="baja">baja</option>
+    </select>
+  );
   const AgeEl = ({ c }) => {
     const d = age(c);
     const col = d > 14 ? '#C0392B' : d > 7 ? '#B5780B' : 'var(--muted)';
@@ -49,7 +60,7 @@ export default function MisTareas() {
           {t.nota ? <span title={t.nota} style={{ fontSize: 13, cursor: 'help' }}>📝</span> : null}
           {vi && <span className="chip" style={{ background: vi.bg, color: vi.color }}>{vi.label}</span>}
           {t.estado === 'pendiente' && <AgeEl c={t.created_at} />}
-          <Chip p={t.prioridad} />
+          <PrioSel t={t} />
           <button className="btn btn-sm btn-ghost" onClick={() => setOpenId(open ? null : t.id)} title="fecha y detalle">{open ? '▲' : '⋯'}</button>
           {t.estado === 'pendiente' && (inWeek
             ? <button className="btn btn-sm btn-ghost" onClick={() => run(() => api.taskUpd(t.id, { en_semana: false }))} title="volver al backlog">← backlog</button>
