@@ -42,8 +42,8 @@ export default function App() {
   if (!boot || !selected) return <div style={{ padding: 40, color: 'var(--muted)' }}>Cargando…</div>;
 
   const isAdmin = boot.me.rol === 'admin';
-  const tabs = [['carga', 'Mi semana'], ['reunion', 'Vista reunión'], ['metricas', 'Métricas']];
-  if (isAdmin) tabs.push(['tareas', 'Mis tareas'], ['okr', 'Planificación'], ['admin', 'Administración']);
+  const tabs = [['carga', 'Mi semana'], ['reunion', 'Vista reunión'], ['metricas', 'Métricas'], ['okr', 'Planificación']];
+  if (isAdmin) tabs.push(['tareas', 'Mis tareas'], ['admin', 'Administración']);
   const logout = () => {
     setToken(null);
     setAuthed(false);
@@ -93,7 +93,7 @@ export default function App() {
         {view === 'reunion' && <Reunion boot={boot} week={selected.id} />}
         {view === 'metricas' && <Metricas boot={boot} week={selected.id} />}
         {view === 'tareas' && isAdmin && <MisTareas />}
-        {view === 'okr' && isAdmin && <Planificacion boot={boot} />}
+        {view === 'okr' && <Planificacion boot={boot} />}
         {view === 'admin' && isAdmin && <Admin boot={boot} reload={loadBoot} />}
       </main>
       {pwOpen && <ChangePassword onClose={() => setPwOpen(false)} />}

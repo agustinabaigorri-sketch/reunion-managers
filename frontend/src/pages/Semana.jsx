@@ -22,7 +22,7 @@ export default function Semana({ boot, week }) {
   const [sheet, setSheet] = useState(null);
   const [objs, setObjs] = useState([]);
   const dirty = useRef(false);
-  const canLink = boot.me.rol === 'admin' && objs.length > 0;
+  const canLink = objs.length > 0;
 
   useEffect(() => {
     dirty.current = false;
@@ -44,8 +44,8 @@ export default function Semana({ boot, week }) {
   }, [entry, week]);
 
   useEffect(() => {
-    if (boot.me.rol === 'admin') api.okrMine().then(setObjs).catch(() => {});
-  }, [boot.me.rol]);
+    api.okrMine().then(setObjs).catch(() => {});
+  }, []);
 
   if (!entry) return <div style={{ color: 'var(--muted)' }}>Cargando…</div>;
 

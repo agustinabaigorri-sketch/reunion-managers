@@ -273,79 +273,112 @@ app.delete('/admin/tags/:id', auth, requireAdmin, wrap(async (req, res) => {
   res.json({ ok: true });
 }));
 
-// ---------- OKR / planificación anual (solo admin) ----------
+// ---------- OKR / planificación (2 niveles: empresa -> objetivo de área por Q) ----------
 async function okrTree(anio) {
   const objs = (await q('select * from okr_objectives where anio=$1 order by orden,id', [anio])).rows;
-  const krs = (await q('select k.* from okr_krs k join okr_objectives o on o.id=k.objective_id where o.anio=$1 order by k.orden,k.id', [anio])).rows;
   const aos = (await q('select * from okr_area_objectives where anio=$1 order by trimestre,orden,id', [anio])).rows;
   const av = (await q('select area_objective_id, count(*)::int n from items where area_objective_id is not null group by area_objective_id')).rows;
   const avMap = {};
   av.forEach((r) => (avMap[r.area_objective_id] = r.n));
   aos.forEach((a) => (a.avances = avMap[a.id] || 0));
-  krs.forEach((k) => (k.areaObjectives = aos.filter((a) => a.kr_id === k.id)));
-  objs.forEach((o) => (o.krs = krs.filter((k) => k.objective_id === o.id)));
+  objs.forEach((o) => (o.areaObjectives = aos.filter((a) => a.objective_id === o.id)));
   return objs;
 }
-app.get('/okr', auth, requireAdmin, wrap(async (req, res) => {
+// Todos ven el árbol; editar objetivos de empresa es solo admin, y objetivos de área solo del propio área.
+app.get('/okr', auth, wrap(async (req, res) => {
   const anio = Number(req.query.anio) || new Date().getFullYear();
   res.json({ anio, objectives: await okrTree(anio) });
 }));
+
+// --- objetivos de empresa (solo admin) ---
 app.post('/okr/objectives', auth, requireAdmin, wrap(async (req, res) => {
-  const { rows } = await q('insert into okr_objectives(anio,titulo) values($1,$2) returning *',
-    [Number(req.body.anio) || new Date().getFullYear(), req.body.titulo || 'Nuevo objetivo']);
+  const { rows } = await q('insert into okr_objectives(anio,titulo,prioridad) values($1,$2,$3) returning *',
+    [Number(req.body.anio) || new Date().getFullYear(), req.body.titulo || 'Nuevo objetivo', req.body.prioridad || 'media']);
   res.json(rows[0]);
 }));
 app.patch('/okr/objectives/:id', auth, requireAdmin, wrap(async (req, res) => {
-  const { rows } = await q('update okr_objectives set titulo=coalesce($2,titulo) where id=$1 returning *', [req.params.id, req.body.titulo ?? null]);
+  const { rows } = await q('update okr_objectives set titulo=coalesce($2,titulo), prioridad=coalesce($3,prioridad) where id=$1 returning *',
+    [req.params.id, req.body.titulo ?? null, req.body.prioridad ?? null]);
   res.json(rows[0]);
 }));
 app.delete('/okr/objectives/:id', auth, requireAdmin, wrap(async (req, res) => { await q('delete from okr_objectives where id=$1', [req.params.id]); res.json({ ok: true }); }));
 
-app.post('/okr/krs', auth, requireAdmin, wrap(async (req, res) => {
+// --- objetivos de área (admin cualquier área; manager solo la suya) ---
+const canAO = (u, areaId) => u.rol === 'admin' || u.area_id === areaId;
+app.post('/okr/area-objectives', auth, wrap(async (req, res) => {
   const b = req.body;
+  const areaId = req.user.rol === 'admin' ? (b.area_id || null) : req.user.area_id;
+  if (!canAO(req.user, areaId)) return res.status(403).json({ error: 'solo podés cargar objetivos de tu área' });
   const { rows } = await q(
-    'insert into okr_krs(objective_id,titulo,unidad,valor_inicial,valor_objetivo,valor_actual) values($1,$2,$3,$4,$5,$6) returning *',
-    [b.objective_id, b.titulo || '', b.unidad || '', b.valor_inicial ?? 0, b.valor_objetivo ?? 100, b.valor_actual ?? 0]);
+    'insert into okr_area_objectives(objective_id,area_id,anio,trimestre,titulo,meta) values($1,$2,$3,$4,$5,$6) returning *',
+    [b.objective_id, areaId, Number(b.anio) || new Date().getFullYear(), b.trimestre || 1, b.titulo || '', b.meta || 5]);
   res.json(rows[0]);
 }));
-app.patch('/okr/krs/:id', auth, requireAdmin, wrap(async (req, res) => {
+app.patch('/okr/area-objectives/:id', auth, wrap(async (req, res) => {
+  const { rows: cur } = await q('select * from okr_area_objectives where id=$1', [req.params.id]);
+  if (!cur[0]) return res.status(404).json({ error: 'no existe' });
+  if (!canAO(req.user, cur[0].area_id)) return res.status(403).json({ error: 'solo tu área' });
   const b = req.body;
+  const area = req.user.rol === 'admin' ? (b.area_id ?? null) : null; // managers no cambian de área
   const { rows } = await q(
-    `update okr_krs set titulo=coalesce($2,titulo), unidad=coalesce($3,unidad),
-       valor_inicial=coalesce($4,valor_inicial), valor_objetivo=coalesce($5,valor_objetivo), valor_actual=coalesce($6,valor_actual)
+    `update okr_area_objectives set titulo=coalesce($2,titulo), objective_id=coalesce($3,objective_id),
+       trimestre=coalesce($4,trimestre), meta=coalesce($5,meta), area_id=coalesce($6,area_id)
      where id=$1 returning *`,
-    [req.params.id, b.titulo ?? null, b.unidad ?? null, b.valor_inicial ?? null, b.valor_objetivo ?? null, b.valor_actual ?? null]);
+    [req.params.id, b.titulo ?? null, b.objective_id ?? null, b.trimestre ?? null, b.meta ?? null, area]);
   res.json(rows[0]);
 }));
-app.delete('/okr/krs/:id', auth, requireAdmin, wrap(async (req, res) => { await q('delete from okr_krs where id=$1', [req.params.id]); res.json({ ok: true }); }));
-
-app.post('/okr/area-objectives', auth, requireAdmin, wrap(async (req, res) => {
-  const b = req.body;
-  const { rows } = await q(
-    'insert into okr_area_objectives(kr_id,area_id,anio,trimestre,titulo,meta) values($1,$2,$3,$4,$5,$6) returning *',
-    [b.kr_id, b.area_id || null, Number(b.anio) || new Date().getFullYear(), b.trimestre || 1, b.titulo || '', b.meta || 5]);
-  res.json(rows[0]);
-}));
-app.patch('/okr/area-objectives/:id', auth, requireAdmin, wrap(async (req, res) => {
-  const b = req.body;
-  const { rows } = await q(
-    `update okr_area_objectives set titulo=coalesce($2,titulo), area_id=coalesce($3,area_id),
-       trimestre=coalesce($4,trimestre), meta=coalesce($5,meta), kr_id=coalesce($6,kr_id)
-     where id=$1 returning *`,
-    [req.params.id, b.titulo ?? null, b.area_id ?? null, b.trimestre ?? null, b.meta ?? null, b.kr_id ?? null]);
-  res.json(rows[0]);
+app.delete('/okr/area-objectives/:id', auth, wrap(async (req, res) => {
+  const { rows: cur } = await q('select * from okr_area_objectives where id=$1', [req.params.id]);
+  if (!cur[0]) return res.json({ ok: true });
+  if (!canAO(req.user, cur[0].area_id)) return res.status(403).json({ error: 'solo tu área' });
+  await q('delete from okr_area_objectives where id=$1', [req.params.id]);
+  res.json({ ok: true });
 }));
 
-// Objetivos de área del usuario logueado (para vincular en la carga semanal).
+// Objetivos de mi área (para vincular en la carga semanal).
 app.get('/okr/area-objectives/mine', auth, wrap(async (req, res) => {
   const { rows } = await q(
-    `select ao.id, ao.titulo, ao.trimestre, k.titulo as kr_titulo
-     from okr_area_objectives ao join okr_krs k on k.id = ao.kr_id
+    `select ao.id, ao.titulo, ao.trimestre, o.titulo as obj_titulo
+     from okr_area_objectives ao join okr_objectives o on o.id = ao.objective_id
      where ao.area_id = $1 and ao.anio = $2 order by ao.trimestre, ao.id`,
     [req.user.area_id, new Date().getFullYear()]);
   res.json(rows);
 }));
-app.delete('/okr/area-objectives/:id', auth, requireAdmin, wrap(async (req, res) => { await q('delete from okr_area_objectives where id=$1', [req.params.id]); res.json({ ok: true }); }));
+
+// --- umbral (setting) ---
+app.get('/okr/settings', auth, wrap(async (req, res) => {
+  const { rows } = await q(`select valor from settings where clave='okr_umbral_pct'`);
+  res.json({ umbral: Number(rows[0]?.valor || 70) });
+}));
+app.patch('/okr/settings', auth, requireAdmin, wrap(async (req, res) => {
+  const v = String(Math.max(0, Math.min(100, Number(req.body.umbral) || 0)));
+  await q(`insert into settings(clave,valor) values('okr_umbral_pct',$1) on conflict (clave) do update set valor=excluded.valor`, [v]);
+  res.json({ umbral: Number(v) });
+}));
+
+// --- reporte (solo admin) ---
+app.get('/okr/report', auth, requireAdmin, wrap(async (req, res) => {
+  const anio = Number(req.query.anio) || new Date().getFullYear();
+  const objectives = await okrTree(anio);
+  const la = (await q(
+    `select ao.objective_id, max(w.fecha_fin) as last
+     from items i join entries e on e.id=i.entry_id join weeks w on w.id=e.week_id
+     join okr_area_objectives ao on ao.id=i.area_objective_id
+     group by ao.objective_id`)).rows;
+  const lastMap = {};
+  la.forEach((r) => (lastMap[r.objective_id] = r.last));
+  const report = objectives.map((o) => ({
+    id: o.id, titulo: o.titulo, prioridad: o.prioridad,
+    avances: o.areaObjectives.reduce((s, a) => s + (a.avances || 0), 0),
+    areas: [...new Set(o.areaObjectives.map((a) => a.area_id).filter(Boolean))],
+    last: lastMap[o.id] || null,
+  }));
+  const week = await getCurrentWeek();
+  const tot = (await q(`select count(*)::int n from items i join entries e on e.id=i.entry_id where e.week_id=$1`, [week.id])).rows[0].n;
+  const lnk = (await q(`select count(*)::int n from items i join entries e on e.id=i.entry_id where e.week_id=$1 and i.area_objective_id is not null`, [week.id])).rows[0].n;
+  const umbral = Number((await q(`select valor from settings where clave='okr_umbral_pct'`)).rows[0]?.valor || 70);
+  res.json({ anio, report, week, totalItems: tot, linkedItems: lnk, pctLinked: tot ? Math.round((lnk / tot) * 100) : 0, umbral });
+}));
 
 // ---------- Planificador personal de tareas ----------
 app.get('/tasks', auth, wrap(async (req, res) => {
