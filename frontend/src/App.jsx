@@ -7,6 +7,7 @@ import Reunion from './pages/Reunion.jsx';
 import Metricas from './pages/Metricas.jsx';
 import Admin from './pages/Admin.jsx';
 import Planificacion from './pages/Planificacion.jsx';
+import MiPlanificacion from './pages/MiPlanificacion.jsx';
 import MisTareas from './pages/MisTareas.jsx';
 import ChangePassword from './ChangePassword.jsx';
 
@@ -42,8 +43,8 @@ export default function App() {
   if (!boot || !selected) return <div style={{ padding: 40, color: 'var(--muted)' }}>Cargando…</div>;
 
   const isAdmin = boot.me.rol === 'admin';
-  const tabs = [['carga', 'Mi semana'], ['reunion', 'Vista reunión'], ['metricas', 'Métricas'], ['okr', 'Planificación']];
-  if (isAdmin) tabs.push(['tareas', 'Mis tareas'], ['admin', 'Administración']);
+  const tabs = [['carga', 'Mi semana'], ['reunion', 'Vista reunión'], ['metricas', 'Métricas'], ['miplan', 'Mi planificación']];
+  if (isAdmin) tabs.push(['okr', 'Planificación empresa'], ['tareas', 'Mis tareas'], ['admin', 'Administración']);
   const logout = () => {
     setToken(null);
     setAuthed(false);
@@ -93,7 +94,8 @@ export default function App() {
         {view === 'reunion' && <Reunion boot={boot} week={selected.id} />}
         {view === 'metricas' && <Metricas boot={boot} week={selected.id} />}
         {view === 'tareas' && isAdmin && <MisTareas />}
-        {view === 'okr' && <Planificacion boot={boot} />}
+        {view === 'miplan' && <MiPlanificacion boot={boot} />}
+        {view === 'okr' && isAdmin && <Planificacion boot={boot} />}
         {view === 'admin' && isAdmin && <Admin boot={boot} reload={loadBoot} />}
       </main>
       {pwOpen && <ChangePassword onClose={() => setPwOpen(false)} />}
