@@ -79,7 +79,7 @@ export default function MiPlanificacion({ boot }) {
                 </div>
               </div>
             ))}
-            <button className="btn btn-sm btn-ghost" onClick={() => run(() => api.okrAddAO({ objective_id: companyObjs[0].id, anio, trimestre: q, titulo: '', meta: 5 }))}>+ agregar objetivo (Q{q})</button>
+            <button className="btn btn-sm btn-ghost" onClick={() => run(() => api.okrAddAO({ objective_id: companyObjs[0].id, area_id: areaId, anio, trimestre: q, titulo: '', meta: 5 }))}>+ agregar objetivo (Q{q})</button>
           </div>
         );
       })}
