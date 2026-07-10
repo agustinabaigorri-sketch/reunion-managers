@@ -88,6 +88,16 @@ export default function Semana({ boot, week, weekObj }) {
   const fmtV = (d) => { const [, mo, day] = d.split('-'); return `${+day} ${MESV[+mo - 1]}`; };
   const dueMetas = metas.filter((m) => !weekObj || (m.vence && m.vence <= weekObj.fecha_fin));
   const doneMeta = (id) => api.okrMetaUpd(id, { hecho: true }).then(() => api.okrMyMetas().then(setMetas)).catch(() => {});
+  const moveItem = async (it, dir) => {
+    if (!weekObj) return;
+    const base = new Date((dir === 'prev' ? weekObj.fecha_inicio : weekObj.fecha_fin) + 'T12:00:00Z');
+    base.setUTCDate(base.getUTCDate() + (dir === 'prev' ? -1 : 1));
+    try {
+      const target = await api.resolveWeek({ date: base.toISOString().slice(0, 10) });
+      await api.addItemToWeek(target.id, { tipo: it.tipo, texto: it.texto, estado: it.estado, necesitaDe: it.necesitaDe, tags: it.tags, areaObjectiveId: it.areaObjectiveId });
+      upd((c) => (c.items = c.items.filter((x) => x._k !== it._k)));
+    } catch (e) { alert(e.message); }
+  };
 
   return (
     <div>
@@ -249,6 +259,11 @@ export default function Semana({ boot, week, weekObj }) {
                       </select>
                     )}
                   </div>
+                  <select value="" onChange={(e) => { if (e.target.value) moveItem(it, e.target.value); }} title="mover a otra semana" style={{ fontSize: 11, padding: '3px 5px', maxWidth: 120 }}>
+                    <option value="">⇄ mover…</option>
+                    <option value="prev">← semana anterior</option>
+                    <option value="next">semana siguiente →</option>
+                  </select>
                   <button className="btn btn-sm btn-ghost" onClick={() => upd((c) => (c.items = c.items.filter((x) => x._k !== it._k)))} title="eliminar">×</button>
                 </div>
               ))}

@@ -181,6 +181,33 @@ app.put('/entries/me', auth, wrap(async (req, res) => {
   res.json(await getEntryData(req.user.id, week));
 }));
 
+// Mueve un ítem a otra semana: lo agrega a la entrada de esa semana (sin reescribirlo).
+app.post('/entries/me/add-item', auth, wrap(async (req, res) => {
+  const week = await weekById(Number(req.query.week));
+  if (!week) return res.status(404).json({ error: 'semana inexistente' });
+  const it = req.body;
+  const c = await pool.connect();
+  try {
+    await c.query('begin');
+    const { rows } = await c.query(
+      `insert into entries(user_id,week_id,submitted,updated_at) values($1,$2,false,now())
+       on conflict (user_id,week_id) do update set updated_at=now() returning id`,
+      [req.user.id, week.id]);
+    const entryId = rows[0].id;
+    const { rows: mx } = await c.query(`select coalesce(max(orden),-1)+1 o from items where entry_id=$1`, [entryId]);
+    const { rows: ir } = await c.query(
+      `insert into items(entry_id,tipo,texto,estado,necesita_de_area_id,orden,area_objective_id) values($1,$2,$3,$4,$5,$6,$7) returning id`,
+      [entryId, it.tipo, it.texto || '', it.estado || (it.tipo === 'bloqueo' ? 'abierto' : 'na'), it.necesitaDe || null, mx[0].o, it.areaObjectiveId || null]);
+    for (const tg of it.tags || []) {
+      const name = norm(tg);
+      const { rows: tr } = await c.query(`insert into tags(name) values($1) on conflict (name) do update set name=excluded.name returning id`, [name]);
+      await c.query(`insert into item_tags(item_id,tag_id) values($1,$2) on conflict do nothing`, [ir[0].id, tr[0].id]);
+    }
+    await c.query('commit');
+  } catch (e) { await c.query('rollback'); throw e; } finally { c.release(); }
+  res.json({ ok: true, week });
+}));
+
 // ---------- tablero (reunión / métricas) ----------
 app.get('/board', auth, wrap(async (req, res) => {
   const week = await weekById(Number(req.query.week));

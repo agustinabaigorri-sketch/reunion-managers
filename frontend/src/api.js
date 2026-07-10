@@ -35,6 +35,7 @@ const realApi = {
   resolveWeek: ({ offset = 0, date } = {}) => req('GET', '/weeks/resolve?' + (date ? 'date=' + date : 'offset=' + offset)),
   entryMe: (week) => req('GET', `/entries/me?week=${week}`),
   saveEntry: (week, data) => req('PUT', `/entries/me?week=${week}`, data),
+  addItemToWeek: (week, item) => req('POST', `/entries/me/add-item?week=${week}`, item),
   board: (week) => req('GET', `/board?week=${week}`),
   alertsMe: (week) => req('GET', `/alerts/me?week=${week}`),
   addUser: (d) => req('POST', '/admin/users', d),

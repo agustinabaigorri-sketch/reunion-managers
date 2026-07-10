@@ -158,6 +158,7 @@ export const demoApi = {
     return wait(store.weeks[idx + offset] || store.weeks[idx]);
   },
   entryMe: (week) => wait(entryData(me().id, Number(week))),
+  addItemToWeek: (week, it) => { const k = me().id + '|' + Number(week); const e = store.entries[k] || (store.entries[k] = { submitted: false, items: [], carry: undefined }); e.items.push({ id: iid(), tipo: it.tipo, texto: it.texto || '', estado: it.estado || (it.tipo === 'bloqueo' ? 'abierto' : 'na'), necesitaDe: it.necesitaDe || null, tags: it.tags || [], areaObjectiveId: it.areaObjectiveId || null }); persist(); return wait({ ok: true }); },
   saveEntry: (week, data) => {
     const k = me().id + '|' + Number(week);
     store.entries[k] = {
