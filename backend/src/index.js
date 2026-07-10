@@ -380,7 +380,7 @@ app.get('/okr/my-plan', auth, wrap(async (req, res) => {
   const aos = (await q('select * from okr_area_objectives where area_id=$1 and anio=$2 order by trimestre,orden,id', [req.user.area_id, anio])).rows;
   const ids = aos.map((a) => a.id);
   const metas = ids.length ? (await q('select * from okr_metas where area_objective_id = any($1) order by orden,id', [ids])).rows : [];
-  const colabs = ids.length ? (await q('select id, area_objective_id, area_id, pedido, estado from okr_colab where area_objective_id = any($1) order by id', [ids])).rows : [];
+  const colabs = ids.length ? (await q('select id, area_objective_id, area_id, pedido, estado, motivo from okr_colab where area_objective_id = any($1) order by id', [ids])).rows : [];
   aos.forEach((a) => { a.metas = metas.filter((m) => m.area_objective_id === a.id); a.colabs = colabs.filter((c) => c.area_objective_id === a.id); });
   res.json({ anio, area_id: req.user.area_id, objectives: aos });
 }));
@@ -390,7 +390,7 @@ app.get('/okr/my-plan', auth, wrap(async (req, res) => {
 app.get('/okr/colab/mine', auth, wrap(async (req, res) => {
   const anio = Number(req.query.anio) || new Date().getFullYear();
   const { rows } = await q(
-    `select c.id, c.pedido, c.estado, ao.titulo as objetivo, ao.trimestre, ao.area_id as owner_area_id
+    `select c.id, c.pedido, c.estado, c.motivo, ao.titulo as objetivo, ao.trimestre, ao.area_id as owner_area_id
      from okr_colab c join okr_area_objectives ao on ao.id = c.area_objective_id
      where c.area_id = $1 and ao.anio = $2 order by c.estado desc, c.id`,
     [req.user.area_id, anio]);
@@ -426,12 +426,23 @@ app.patch('/okr/colab/:id', auth, wrap(async (req, res) => {
   const c = cR[0];
   const ao = await aoOfColab(req.params.id);
   const b = req.body;
-  // El pedido lo edita el dueño del objetivo; el estado lo marca el área involucrada (o admin).
-  if (b.pedido != null && !canAO(req.user, ao.area_id)) return res.status(403).json({ error: 'el pedido lo edita el área dueña del objetivo' });
-  if (b.estado != null && !(req.user.rol === 'admin' || req.user.area_id === c.area_id)) return res.status(403).json({ error: 'el estado lo marca el área involucrada' });
+  const esOwner = canAO(req.user, ao.area_id);
+  const esInvolucrado = req.user.rol === 'admin' || req.user.area_id === c.area_id;
+  // El pedido y la reasignación los hace el dueño; el estado/motivo los marca el área involucrada.
+  if (b.pedido != null && !esOwner) return res.status(403).json({ error: 'el pedido lo edita el área dueña del objetivo' });
+  if (b.estado != null && !esInvolucrado) return res.status(403).json({ error: 'el estado lo marca el área involucrada' });
+  if (b.motivo != null && !esInvolucrado) return res.status(403).json({ error: 'el motivo lo escribe el área involucrada' });
+  if (b.area_id != null && !esOwner) return res.status(403).json({ error: 'reasignar: solo el área dueña del objetivo' });
+  // Reasignar a otra área ⇒ vuelve a 'pendiente' y limpia el motivo del rechazo anterior.
+  const reassign = b.area_id != null && Number(b.area_id) !== c.area_id;
+  const nuevoEstado = reassign ? 'pendiente' : (b.estado ?? null);
+  const hasMotivo = reassign || b.motivo !== undefined;
+  const nuevoMotivo = reassign ? null : (b.motivo ?? null);
   const { rows } = await q(
-    'update okr_colab set pedido=coalesce($2,pedido), estado=coalesce($3,estado) where id=$1 returning *',
-    [req.params.id, b.pedido ?? null, b.estado ?? null]);
+    `update okr_colab set pedido=coalesce($2,pedido), estado=coalesce($3,estado),
+       motivo = case when $4 then $5 else motivo end, area_id=coalesce($6,area_id)
+     where id=$1 returning *`,
+    [req.params.id, b.pedido ?? null, nuevoEstado, hasMotivo, nuevoMotivo, b.area_id ? Number(b.area_id) : null]);
   res.json(rows[0]);
 }));
 app.delete('/okr/colab/:id', auth, wrap(async (req, res) => {
