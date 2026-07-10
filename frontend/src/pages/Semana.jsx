@@ -22,6 +22,7 @@ export default function Semana({ boot, week, weekObj }) {
   const [sheet, setSheet] = useState(null);
   const [objs, setObjs] = useState([]);
   const [metas, setMetas] = useState([]);
+  const [colabs, setColabs] = useState([]);
   const dirty = useRef(false);
   const canLink = objs.length > 0;
 
@@ -47,6 +48,7 @@ export default function Semana({ boot, week, weekObj }) {
   useEffect(() => {
     api.okrMine().then(setObjs).catch(() => {});
     api.okrMyMetas().then(setMetas).catch(() => {});
+    api.okrColabAgenda().then(setColabs).catch(() => {});
   }, []);
 
   if (!entry) return <div style={{ color: 'var(--muted)' }}>Cargando…</div>;
@@ -88,7 +90,13 @@ export default function Semana({ boot, week, weekObj }) {
   const fmtV = (d) => { const [, mo, day] = d.split('-'); return `${+day} ${MESV[+mo - 1]}`; };
   const horizon = weekObj ? (() => { const d = new Date(weekObj.fecha_fin + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + 28); return d.toISOString().slice(0, 10); })() : null;
   const dueMetas = metas.filter((m) => m.vence && (!horizon || m.vence <= horizon));
+  const dueColabs = colabs.filter((c) => !c.vence || !horizon || c.vence <= horizon);
+  const agenda = [
+    ...dueMetas.map((m) => ({ key: 'm' + m.id, kind: 'meta', id: m.id, titulo: m.titulo, sub: m.objetivo, vence: m.vence })),
+    ...dueColabs.map((c) => ({ key: 'c' + c.id, kind: 'colab', id: c.id, titulo: c.pedido, sub: c.objetivo, tag: c.owner_area_nombre, vence: c.vence })),
+  ].sort((a, b) => (a.vence || '9999-99-99').localeCompare(b.vence || '9999-99-99'));
   const doneMeta = (id) => api.okrMetaUpd(id, { hecho: true }).then(() => api.okrMyMetas().then(setMetas)).catch(() => {});
+  const doneColab = (id) => api.okrColabUpd(id, { estado: 'hecho' }).then(() => api.okrColabAgenda().then(setColabs)).catch(() => {});
   const moveItem = async (it, dir) => {
     if (!weekObj) return;
     const base = new Date((dir === 'prev' ? weekObj.fecha_inicio : weekObj.fecha_fin) + 'T12:00:00Z');
@@ -170,25 +178,28 @@ export default function Semana({ boot, week, weekObj }) {
         </div>
       )}
 
-      {dueMetas.length > 0 && (
+      {agenda.length > 0 && (
         <div className="hero" style={{ marginTop: 16 }}>
           <div className="hero-top" style={{ alignItems: 'flex-start' }}>
             <div style={{ flex: 1 }}>
               <div className="hero-h">Esta semana y las próximas · de tus objetivos</div>
-              <div className="hero-sub">Metas con fecha para esta semana (o atrasadas) y las próximas 4 semanas. Tildá las que cierres.{dueMetas.length > 3 ? ` · ${dueMetas.length} en total (scrolleá)` : ''}</div>
+              <div className="hero-sub">Tus metas con fecha (esta semana, atrasadas o próximas 4 semanas) + lo que tomaste de otras áreas. Tildá lo que cierres.{agenda.length > 3 ? ` · ${agenda.length} en total (scrolleá)` : ''}</div>
             </div>
           </div>
           <div style={{ maxHeight: 168, overflowY: 'auto', paddingRight: 4, marginRight: -4 }}>
-            {dueMetas.map((m) => {
-              const overdue = weekObj && m.vence < weekObj.fecha_inicio;
-              const upcoming = weekObj && m.vence > weekObj.fecha_fin;
-              const chipBg = overdue ? 'var(--red-bg)' : upcoming ? 'var(--surface-2, #eef1f4)' : 'var(--eb-green-bg)';
-              const chipFg = overdue ? 'var(--red)' : upcoming ? 'var(--muted)' : 'var(--eb-green-d)';
+            {agenda.map((it) => {
+              const overdue = weekObj && it.vence && it.vence < weekObj.fecha_inicio;
+              const upcoming = weekObj && it.vence && it.vence > weekObj.fecha_fin;
+              const chipBg = it.kind === 'colab' ? '#EFE6F7' : overdue ? 'var(--red-bg)' : upcoming ? 'var(--surface-2, #eef1f4)' : 'var(--eb-green-bg)';
+              const chipFg = it.kind === 'colab' ? '#7a1a86' : overdue ? 'var(--red)' : upcoming ? 'var(--muted)' : 'var(--eb-green-d)';
               return (
-                <div className="todo" key={m.id} style={{ opacity: upcoming ? 0.72 : 1 }}>
-                  <input type="checkbox" onChange={() => doneMeta(m.id)} title="marcar como hecha" />
-                  <span className="txt">{m.titulo} <span className="muted">· {m.objetivo}</span></span>
-                  <span className="chip" style={{ background: chipBg, color: chipFg }}>{overdue ? '⚠ ' : upcoming ? '· ' : ''}{fmtV(m.vence)}</span>
+                <div className="todo" key={it.key} style={{ opacity: upcoming && it.kind !== 'colab' ? 0.72 : 1, background: it.kind === 'colab' ? '#F7F3FF' : undefined, borderRadius: it.kind === 'colab' ? 8 : undefined, margin: it.kind === 'colab' ? '2px -6px' : undefined, paddingLeft: it.kind === 'colab' ? 6 : undefined, paddingRight: it.kind === 'colab' ? 6 : undefined }}>
+                  <input type="checkbox" onChange={() => (it.kind === 'colab' ? doneColab(it.id) : doneMeta(it.id))} title="marcar como hecha" />
+                  <span className="txt">
+                    {it.titulo} <span className="muted">· {it.sub}</span>
+                    {it.kind === 'colab' && <span style={{ display: 'inline-block', fontSize: 10, fontWeight: 600, color: '#fff', background: '#FF6428', padding: '1px 8px', borderRadius: 20, marginLeft: 5, verticalAlign: 'middle' }}>↩ pedido de {it.tag}</span>}
+                  </span>
+                  <span className="chip" style={{ background: chipBg, color: chipFg }}>{it.vence ? ((overdue ? '⚠ ' : upcoming ? '· ' : '') + fmtV(it.vence)) : 'sin fecha'}</span>
                 </div>
               );
             })}

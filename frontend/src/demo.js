@@ -2,7 +2,7 @@
 // Se activa con VITE_DEMO=1 (ver `npm run demo`). Los datos viven en localStorage.
 export const DEMO = String(import.meta.env.VITE_DEMO) === '1' || String(import.meta.env.VITE_DEMO) === 'true';
 
-const KEY = 'rm_demo_store_v6';
+const KEY = 'rm_demo_store_v7';
 const UKEY = 'rm_demo_uid';
 let _id = 5000;
 const iid = () => ++_id;
@@ -133,9 +133,10 @@ function ensureOkr() {
     { id: 9301, area_objective_id: 9204, titulo: 'Definir plantilla de cierre', hecho: true, avance: 100, orden: 0 },
     { id: 9302, area_objective_id: 9204, titulo: 'Automatizar en el ERP', hecho: false, avance: 40, vence: '2026-07-03', orden: 1 },
     { id: 9303, area_objective_id: 9204, titulo: 'Validar con contable', hecho: false, avance: 0, vence: '2026-07-01', orden: 2 },
+    { id: 9310, area_objective_id: 9201, titulo: 'Definir packs comerciales', hecho: false, avance: 0, vence: '2026-07-22', orden: 0 },
   ];
   store.okrColabs = [
-    { id: 9401, area_objective_id: 9201, area_id: 1, pedido: 'Definir el pricing y los packs para escuelas nuevas', estado: 'pendiente' },
+    { id: 9401, area_objective_id: 9201, area_id: 1, pedido: 'Definir el pricing y los packs para escuelas nuevas', estado: 'tomado' },
     { id: 9402, area_objective_id: 9204, area_id: 3, pedido: 'Validar el flujo con Producto', estado: 'tomado' },
   ];
   const u1 = store.users.find((u) => u.area_id === 1);
@@ -220,6 +221,7 @@ export const demoApi = {
   okrUpdAO: (id, d) => { ensureOkr(); const a = store.okrAOs.find((x) => x.id === Number(id)); if (a) { ['titulo', 'area_id', 'trimestre', 'meta', 'objective_id', 'anio'].forEach((f) => { if (d[f] != null) a[f] = f === 'titulo' ? d[f] : Number(d[f]); }); if ('colab_areas' in d) a.colab_areas = d.colab_areas; if (d.prioridad != null) a.prioridad = d.prioridad; if ('detalle' in d) a.detalle = d.detalle; } persist(); return wait(a); },
   okrMyPlan: (anio) => { ensureOkr(); const a = me().area_id; const yr = Number(anio) || 2026; const objs = store.okrAOs.filter((x) => x.area_id === a && x.anio === yr).map((x) => ({ ...x, colab_areas: x.colab_areas || [], colabs: (store.okrColabs || []).filter((c) => c.area_objective_id === x.id), metas: (store.okrMetas || []).filter((m) => m.area_objective_id === x.id).sort((p, r) => (p.orden || 0) - (r.orden || 0)) })); return wait({ anio: yr, area_id: a, objectives: objs }); },
   okrColabMine: (anio) => { ensureOkr(); const a = me().area_id; const yr = Number(anio) || 2026; return wait((store.okrColabs || []).filter((c) => c.area_id === a).map((c) => { const ao = store.okrAOs.find((x) => x.id === c.area_objective_id) || {}; return { c, ao }; }).filter(({ ao }) => ao.anio === yr).map(({ c, ao }) => ({ id: c.id, pedido: c.pedido, estado: c.estado, objetivo: ao.titulo, trimestre: ao.trimestre, owner_area_id: ao.area_id }))); },
+  okrColabAgenda: () => { ensureOkr(); const a = me().area_id; return wait((store.okrColabs || []).filter((c) => c.area_id === a && c.estado === 'tomado').map((c) => { const ao = store.okrAOs.find((x) => x.id === c.area_objective_id) || {}; const vences = (store.okrMetas || []).filter((m) => m.area_objective_id === ao.id && m.vence && !m.hecho).map((m) => m.vence).sort(); return { id: c.id, pedido: c.pedido, estado: c.estado, objetivo: ao.titulo, owner_area_nombre: (store.areas.find((x) => x.id === ao.area_id) || {}).nombre, vence: vences[0] || null }; }).sort((p, r) => (p.vence || '9999-99-99').localeCompare(r.vence || '9999-99-99'))); },
   okrColabAdd: (d) => { ensureOkr(); store.okrColabs = store.okrColabs || []; const ex = store.okrColabs.find((c) => c.area_objective_id === Number(d.area_objective_id) && c.area_id === Number(d.area_id)); if (ex) { if (d.pedido != null) ex.pedido = d.pedido; } else store.okrColabs.push({ id: iid(), area_objective_id: Number(d.area_objective_id), area_id: Number(d.area_id), pedido: d.pedido || '', estado: 'pendiente' }); persist(); return wait({ ok: true }); },
   okrColabUpd: (id, d) => { ensureOkr(); const c = (store.okrColabs || []).find((x) => x.id === Number(id)); if (c) { if (d.pedido != null) c.pedido = d.pedido; if (d.estado != null) c.estado = d.estado; } persist(); return wait(c); },
   okrColabDel: (id) => { ensureOkr(); store.okrColabs = (store.okrColabs || []).filter((x) => x.id !== Number(id)); persist(); return wait({ ok: true }); },

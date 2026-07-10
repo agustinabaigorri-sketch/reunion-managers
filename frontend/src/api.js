@@ -57,6 +57,7 @@ const realApi = {
   okrMine: () => req('GET', '/okr/area-objectives/mine'),
   okrMyPlan: (anio) => req('GET', '/okr/my-plan' + (anio ? '?anio=' + anio : '')),
   okrColabMine: (anio) => req('GET', '/okr/colab/mine' + (anio ? '?anio=' + anio : '')),
+  okrColabAgenda: () => req('GET', '/okr/colab/agenda'),
   okrColabAdd: (d) => req('POST', '/okr/colab', d),
   okrColabUpd: (id, d) => req('PATCH', '/okr/colab/' + id, d),
   okrColabDel: (id) => req('DELETE', '/okr/colab/' + id),

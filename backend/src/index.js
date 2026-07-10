@@ -396,6 +396,18 @@ app.get('/okr/colab/mine', auth, wrap(async (req, res) => {
     [req.user.area_id, anio]);
   res.json(rows);
 }));
+// Lo que tomé de otras áreas (estado tomado), fechado por la meta más próxima del objetivo — para Mi semana.
+app.get('/okr/colab/agenda', auth, wrap(async (req, res) => {
+  const { rows } = await q(
+    `select c.id, c.pedido, c.estado, ao.titulo as objetivo, a.nombre as owner_area_nombre,
+       (select min(m.vence) from okr_metas m where m.area_objective_id = ao.id and m.vence is not null and m.hecho = false) as vence
+     from okr_colab c
+     join okr_area_objectives ao on ao.id = c.area_objective_id
+     left join areas a on a.id = ao.area_id
+     where c.area_id = $1 and c.estado = 'tomado'
+     order by vence nulls last, c.id`, [req.user.area_id]);
+  res.json(rows);
+}));
 async function aoOfColab(id) { const { rows } = await q('select ao.* from okr_colab c join okr_area_objectives ao on ao.id=c.area_objective_id where c.id=$1', [id]); return rows[0]; }
 // Sumar un área involucrada a un objetivo (lo hace el dueño del objetivo).
 app.post('/okr/colab', auth, wrap(async (req, res) => {

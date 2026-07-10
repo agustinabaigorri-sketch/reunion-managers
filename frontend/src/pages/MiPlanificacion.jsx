@@ -66,7 +66,7 @@ export default function MiPlanificacion({ boot }) {
           <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 4 }}>
             <span style={{ width: 9, height: 9, borderRadius: '50%', background: '#1F86D6' }} />
             <b style={{ fontSize: 14 }}>Otras áreas te necesitan</b>
-            <span className="muted small">· {teNec.filter((t) => t.estado !== 'tomado').length} pendiente(s)</span>
+            <span className="muted small">· {teNec.filter((t) => t.estado === 'pendiente').length} pendiente(s)</span>
           </div>
           {teNec.map((t) => {
             const oa = areaById(t.owner_area_id);
@@ -77,9 +77,14 @@ export default function MiPlanificacion({ boot }) {
                   <div className="small"><b>{oa.nombre}</b> te necesita en <b>{t.objetivo || '(sin título)'}</b> <span className="muted">· Q{t.trimestre}</span></div>
                   <div className="small muted" style={{ marginTop: 2 }}>→ te pide: {t.pedido ? <span style={{ color: 'var(--text)' }}>{t.pedido}</span> : <i>(sin detalle todavía)</i>}</div>
                 </div>
-                {t.estado === 'tomado'
-                  ? <button className="btn btn-sm btn-ghost" onClick={() => run(() => api.okrColabUpd(t.id, { estado: 'pendiente' }))} title="volver a pendiente" style={{ color: '#2e9e5b', flex: 'none' }}>✓ tomado</button>
-                  : <button className="btn btn-sm" onClick={() => run(() => api.okrColabUpd(t.id, { estado: 'tomado' }))} style={{ flex: 'none' }}>tomarlo</button>}
+                {t.estado === 'hecho'
+                  ? <button className="btn btn-sm btn-ghost" onClick={() => run(() => api.okrColabUpd(t.id, { estado: 'tomado' }))} title="reabrir" style={{ color: '#2e9e5b', flex: 'none' }}>✓ hecho</button>
+                  : t.estado === 'tomado'
+                    ? <div style={{ display: 'flex', gap: 4, flex: 'none' }}>
+                        <button className="btn btn-sm" onClick={() => run(() => api.okrColabUpd(t.id, { estado: 'hecho' }))} title="marcar como hecho">✓ listo</button>
+                        <button className="btn btn-sm btn-ghost" onClick={() => run(() => api.okrColabUpd(t.id, { estado: 'pendiente' }))} title="soltar (volver a pendiente)">×</button>
+                      </div>
+                    : <button className="btn btn-sm" onClick={() => run(() => api.okrColabUpd(t.id, { estado: 'tomado' }))} style={{ flex: 'none' }}>tomarlo</button>}
               </div>
             );
           })}
@@ -157,7 +162,7 @@ export default function MiPlanificacion({ boot }) {
                       <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '5px 0', flexWrap: 'wrap' }}>
                         <span style={{ fontSize: 11.5, fontWeight: 500, color: '#fff', background: ar.color, padding: '3px 10px', borderRadius: 20, flex: 'none' }}>{ar.nombre}</span>
                         <input type="text" defaultValue={c.pedido || ''} key={c.pedido} placeholder="¿qué necesitás de esta área?" onBlur={(e) => e.target.value !== (c.pedido || '') && run(() => api.okrColabUpd(c.id, { pedido: e.target.value }))} style={{ flex: 1, minWidth: 180, padding: '4px 8px', fontSize: 12.5 }} />
-                        {c.estado === 'tomado' && <span style={{ fontSize: 11, color: '#2e9e5b', fontWeight: 600, flex: 'none' }}>✓ tomado</span>}
+                        {(c.estado === 'tomado' || c.estado === 'hecho') && <span style={{ fontSize: 11, color: '#2e9e5b', fontWeight: 600, flex: 'none' }}>✓ {c.estado}</span>}
                         <button className="btn btn-sm btn-ghost" onClick={() => run(() => api.okrColabDel(c.id))} title="quitar área">×</button>
                       </div>
                     );
