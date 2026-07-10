@@ -41,7 +41,7 @@ export default function MiPlanificacion({ boot }) {
   );
   if (!data) return <div style={{ color: 'var(--muted)' }}>Cargando…</div>;
   const anio = data.anio;
-  const aoPct = (a) => { const m = a.metas || []; return m.length ? Math.round((m.filter((x) => x.hecho).length / m.length) * 100) : 0; };
+  const aoPct = (a) => { const m = a.metas || []; return m.length ? Math.round(m.reduce((s, x) => s + (x.avance || 0), 0) / m.length) : 0; };
 
   const toggleColab = (a, id) => {
     const cur = a.colab_areas || [];
@@ -98,11 +98,14 @@ export default function MiPlanificacion({ boot }) {
 
                 {/* metas */}
                 <div style={{ marginTop: 10, marginLeft: 6, paddingLeft: 12, borderLeft: '2px solid var(--line)' }}>
-                  <div className="muted small" style={{ marginBottom: 4 }}>Metas ({(a.metas || []).filter((m) => m.hecho).length}/{(a.metas || []).length}):</div>
+                  <div className="muted small" style={{ marginBottom: 4 }}>Metas ({(a.metas || []).filter((m) => (m.avance || 0) >= 100).length}/{(a.metas || []).length} hechas):</div>
                   {(a.metas || []).map((m) => (
-                    <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 9, margin: '5px 0' }}>
-                      <input type="checkbox" checked={m.hecho} onChange={(e) => run(() => api.okrMetaUpd(m.id, { hecho: e.target.checked }))} />
-                      <input type="text" defaultValue={m.titulo} placeholder="Meta…" onBlur={(e) => e.target.value !== m.titulo && run(() => api.okrMetaUpd(m.id, { titulo: e.target.value }))} style={{ flex: 1, minWidth: 140, padding: '4px 7px', textDecoration: m.hecho ? 'line-through' : 'none', color: m.hecho ? 'var(--hint)' : 'var(--text)' }} />
+                    <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 9, margin: '5px 0', flexWrap: 'wrap' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, width: 108 }} title="% de avance (100 = hecha)">
+                        <div className="bar-track"><div className="bar-fill" style={{ width: (m.avance || 0) + '%', background: (m.avance || 0) >= 100 ? '#2e9e5b' : color }} /></div>
+                        <input type="number" min="0" max="100" defaultValue={m.avance || 0} key={m.avance} onBlur={(e) => { const v = Math.max(0, Math.min(100, +e.target.value)); if (v !== (m.avance || 0)) run(() => api.okrMetaUpd(m.id, { avance: v })); }} style={{ width: 44, padding: '3px 5px' }} />
+                      </div>
+                      <input type="text" defaultValue={m.titulo} placeholder="Meta…" onBlur={(e) => e.target.value !== m.titulo && run(() => api.okrMetaUpd(m.id, { titulo: e.target.value }))} style={{ flex: 1, minWidth: 140, padding: '4px 7px', textDecoration: (m.avance || 0) >= 100 ? 'line-through' : 'none', color: (m.avance || 0) >= 100 ? 'var(--hint)' : 'var(--text)' }} />
                       <input type="date" defaultValue={m.vence || ''} onChange={(e) => run(() => api.okrMetaUpd(m.id, { vence: e.target.value || null }))} style={{ padding: '4px 6px', fontSize: 12 }} title="fecha límite" />
                       <button className="btn btn-sm btn-ghost" onClick={() => run(() => api.okrMetaDel(m.id))} title="eliminar">×</button>
                     </div>

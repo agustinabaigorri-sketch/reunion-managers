@@ -2,7 +2,7 @@
 // Se activa con VITE_DEMO=1 (ver `npm run demo`). Los datos viven en localStorage.
 export const DEMO = String(import.meta.env.VITE_DEMO) === '1' || String(import.meta.env.VITE_DEMO) === 'true';
 
-const KEY = 'rm_demo_store_v4';
+const KEY = 'rm_demo_store_v5';
 const UKEY = 'rm_demo_uid';
 let _id = 5000;
 const iid = () => ++_id;
@@ -130,9 +130,9 @@ function ensureOkr() {
     { id: 9204, objective_id: 9002, area_id: 1, anio: 2026, trimestre: 3, titulo: 'Automatizar cierres contables', meta: 5, colab_areas: [3], orden: 3 },
   ];
   store.okrMetas = [
-    { id: 9301, area_objective_id: 9204, titulo: 'Definir plantilla de cierre', hecho: true, orden: 0 },
-    { id: 9302, area_objective_id: 9204, titulo: 'Automatizar en el ERP', hecho: false, vence: '2026-07-03', orden: 1 },
-    { id: 9303, area_objective_id: 9204, titulo: 'Validar con contable', hecho: false, vence: '2026-07-01', orden: 2 },
+    { id: 9301, area_objective_id: 9204, titulo: 'Definir plantilla de cierre', hecho: true, avance: 100, orden: 0 },
+    { id: 9302, area_objective_id: 9204, titulo: 'Automatizar en el ERP', hecho: false, avance: 40, vence: '2026-07-03', orden: 1 },
+    { id: 9303, area_objective_id: 9204, titulo: 'Validar con contable', hecho: false, avance: 0, vence: '2026-07-01', orden: 2 },
   ];
   store.umbral = 70;
   persist();
@@ -205,8 +205,8 @@ export const demoApi = {
   okrAddAO: (d) => { ensureOkr(); const u = me(); const areaId = u.rol === 'admin' ? (d.area_id ? Number(d.area_id) : null) : u.area_id; store.okrAOs.push({ id: iid(), objective_id: d.objective_id ? Number(d.objective_id) : null, area_id: areaId, anio: Number(d.anio) || 2026, trimestre: Number(d.trimestre) || 1, titulo: d.titulo || '', meta: Number(d.meta) || 5, prioridad: d.prioridad || 'media', detalle: null, colab_areas: [], orden: store.okrAOs.length }); persist(); return wait({ ok: true }); },
   okrUpdAO: (id, d) => { ensureOkr(); const a = store.okrAOs.find((x) => x.id === Number(id)); if (a) { ['titulo', 'area_id', 'trimestre', 'meta', 'objective_id'].forEach((f) => { if (d[f] != null) a[f] = f === 'titulo' ? d[f] : Number(d[f]); }); if ('colab_areas' in d) a.colab_areas = d.colab_areas; if (d.prioridad != null) a.prioridad = d.prioridad; if ('detalle' in d) a.detalle = d.detalle; } persist(); return wait(a); },
   okrMyPlan: (anio) => { ensureOkr(); const a = me().area_id; const yr = Number(anio) || 2026; const objs = store.okrAOs.filter((x) => x.area_id === a && x.anio === yr).map((x) => ({ ...x, colab_areas: x.colab_areas || [], metas: (store.okrMetas || []).filter((m) => m.area_objective_id === x.id) })); return wait({ anio: yr, area_id: a, objectives: objs }); },
-  okrMetaAdd: (d) => { ensureOkr(); store.okrMetas = store.okrMetas || []; store.okrMetas.push({ id: iid(), area_objective_id: Number(d.area_objective_id), titulo: d.titulo || '', hecho: false, orden: store.okrMetas.length }); persist(); return wait({ ok: true }); },
-  okrMetaUpd: (id, d) => { ensureOkr(); const m = (store.okrMetas || []).find((x) => x.id === Number(id)); if (m) { if (d.titulo != null) m.titulo = d.titulo; if (d.hecho != null) m.hecho = !!d.hecho; if ('vence' in d) m.vence = d.vence || null; } persist(); return wait(m); },
+  okrMetaAdd: (d) => { ensureOkr(); store.okrMetas = store.okrMetas || []; store.okrMetas.push({ id: iid(), area_objective_id: Number(d.area_objective_id), titulo: d.titulo || '', hecho: false, avance: 0, orden: store.okrMetas.length }); persist(); return wait({ ok: true }); },
+  okrMetaUpd: (id, d) => { ensureOkr(); const m = (store.okrMetas || []).find((x) => x.id === Number(id)); if (m) { if (d.titulo != null) m.titulo = d.titulo; if ('vence' in d) m.vence = d.vence || null; if (d.avance != null) { m.avance = Math.max(0, Math.min(100, +d.avance)); m.hecho = m.avance >= 100; } else if (d.hecho != null) { m.hecho = !!d.hecho; m.avance = m.hecho ? 100 : 0; } } persist(); return wait(m); },
   okrMetaDel: (id) => { ensureOkr(); store.okrMetas = (store.okrMetas || []).filter((x) => x.id !== Number(id)); persist(); return wait({ ok: true }); },
   okrMyMetas: () => { ensureOkr(); const a = me().area_id; const aoIds = store.okrAOs.filter((x) => x.area_id === a).map((x) => x.id); return wait((store.okrMetas || []).filter((m) => aoIds.includes(m.area_objective_id) && m.vence && !m.hecho).map((m) => ({ id: m.id, titulo: m.titulo, vence: m.vence, hecho: m.hecho, objetivo: (store.okrAOs.find((x) => x.id === m.area_objective_id) || {}).titulo }))); },
   okrDelAO: (id) => { ensureOkr(); store.okrAOs = store.okrAOs.filter((x) => x.id !== Number(id)); persist(); return wait({ ok: true }); },

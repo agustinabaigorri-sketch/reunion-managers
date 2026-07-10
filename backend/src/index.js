@@ -372,10 +372,15 @@ app.patch('/okr/metas/:id', auth, wrap(async (req, res) => {
   if (!canAO(req.user, ao.area_id)) return res.status(403).json({ error: 'solo tu área' });
   const b = req.body;
   const hasV = Object.prototype.hasOwnProperty.call(b, 'vence');
+  const hasAv = b.avance != null;
+  let avance = hasAv ? Math.max(0, Math.min(100, Math.round(+b.avance))) : null;
+  let hecho = b.hecho ?? null;
+  if (hasAv) hecho = avance >= 100;
+  else if (b.hecho != null) avance = b.hecho ? 100 : 0;
   const { rows } = await q(
-    `update okr_metas set titulo=coalesce($2,titulo), hecho=coalesce($3,hecho),
-       vence = case when $4 then $5::date else vence end where id=$1 returning *`,
-    [req.params.id, b.titulo ?? null, b.hecho ?? null, hasV, hasV ? (b.vence || null) : null]);
+    `update okr_metas set titulo=coalesce($2,titulo), hecho=coalesce($3,hecho), avance=coalesce($4,avance),
+       vence = case when $5 then $6::date else vence end where id=$1 returning *`,
+    [req.params.id, b.titulo ?? null, hecho, avance, hasV, hasV ? (b.vence || null) : null]);
   res.json(rows[0]);
 }));
 
