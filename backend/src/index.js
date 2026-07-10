@@ -352,7 +352,8 @@ app.patch('/okr/area-objectives/:id', auth, wrap(async (req, res) => {
     `update okr_area_objectives set titulo=coalesce($2,titulo), objective_id=coalesce($3,objective_id),
        trimestre=coalesce($4,trimestre), meta=coalesce($5,meta), area_id=coalesce($6,area_id),
        colab_areas = case when $7 then $8::int[] else colab_areas end,
-       prioridad=coalesce($9,prioridad), detalle=coalesce($10,detalle), anio=coalesce($11,anio)
+       prioridad=coalesce($9,prioridad), detalle=coalesce($10,detalle), anio=coalesce($11,anio),
+       updated_at=now()
      where id=$1 returning *`,
     [req.params.id, b.titulo ?? null, b.objective_id ?? null, b.trimestre ?? null, b.meta ?? null, area, hasC, hasC ? b.colab_areas : null, b.prioridad ?? null, b.detalle ?? null, b.anio ?? null]);
   res.json(rows[0]);
@@ -377,9 +378,15 @@ app.get('/okr/area-objectives/mine', auth, wrap(async (req, res) => {
 // Plan de mi área con sub-metas (para "Mi planificación").
 app.get('/okr/my-plan', auth, wrap(async (req, res) => {
   const anio = Number(req.query.anio) || new Date().getFullYear();
-  const aos = (await q('select * from okr_area_objectives where area_id=$1 and anio=$2 order by trimestre,orden,id', [req.user.area_id, anio])).rows;
+  // asof=YYYY-MM-DD: ver el plan como estaba a esa fecha (solo lo creado hasta el fin de ese día).
+  const asof = /^\d{4}-\d{2}-\d{2}$/.test(req.query.asof || '') ? req.query.asof : null;
+  const aos = (await q(
+    `select * from okr_area_objectives where area_id=$1 and anio=$2 and ($3::timestamptz is null or created_at <= $3) order by trimestre,orden,id`,
+    [req.user.area_id, anio, asof ? asof + ' 23:59:59' : null])).rows;
   const ids = aos.map((a) => a.id);
-  const metas = ids.length ? (await q('select * from okr_metas where area_objective_id = any($1) order by orden,id', [ids])).rows : [];
+  const metas = ids.length ? (await q(
+    `select * from okr_metas where area_objective_id = any($1) and ($2::timestamptz is null or created_at <= $2) order by orden,id`,
+    [ids, asof ? asof + ' 23:59:59' : null])).rows : [];
   const colabs = ids.length ? (await q('select id, area_objective_id, area_id, pedido, estado, motivo from okr_colab where area_objective_id = any($1) order by id', [ids])).rows : [];
   aos.forEach((a) => { a.metas = metas.filter((m) => m.area_objective_id === a.id); a.colabs = colabs.filter((c) => c.area_objective_id === a.id); });
   res.json({ anio, area_id: req.user.area_id, objectives: aos });
@@ -474,7 +481,7 @@ app.patch('/okr/metas/:id', auth, wrap(async (req, res) => {
   else if (b.hecho != null) avance = b.hecho ? 100 : 0;
   const { rows } = await q(
     `update okr_metas set titulo=coalesce($2,titulo), hecho=coalesce($3,hecho), avance=coalesce($4,avance),
-       vence = case when $5 then $6::date else vence end where id=$1 returning *`,
+       vence = case when $5 then $6::date else vence end, updated_at=now() where id=$1 returning *`,
     [req.params.id, b.titulo ?? null, hecho, avance, hasV, hasV ? (b.vence || null) : null]);
   res.json(rows[0]);
 }));

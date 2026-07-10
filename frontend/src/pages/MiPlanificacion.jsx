@@ -25,6 +25,7 @@ function calidad(a) {
 export default function MiPlanificacion({ boot }) {
   const [data, setData] = useState(null);
   const [teNec, setTeNec] = useState([]);
+  const [asof, setAsof] = useState(null);
   const [busy, setBusy] = useState(false);
   const areaId = boot.me.area_id;
   const areaObj = boot.areas.find((a) => a.id === areaId);
@@ -32,9 +33,10 @@ export default function MiPlanificacion({ boot }) {
   const otras = boot.areas.filter((a) => a.id !== areaId);
   const areaById = (id) => boot.areas.find((a) => a.id === id) || { nombre: '—', color: 'var(--muted)' };
 
-  const load = useCallback((anio) => Promise.all([api.okrMyPlan(anio), api.okrColabMine(anio)]).then(([d, tn]) => { setData(d); setTeNec(tn); }), []);
+  const load = useCallback((anio, asofDate) => Promise.all([api.okrMyPlan(anio, asofDate), api.okrColabMine(anio)]).then(([d, tn]) => { setData(d); setTeNec(tn); }), []);
   useEffect(() => { load(); }, [load]);
-  const run = async (fn) => { setBusy(true); try { await fn(); await load(data?.anio); } catch (e) { alert(e.message); } finally { setBusy(false); } };
+  const verAsof = (v) => { setAsof(v || null); load(data?.anio, v || null); };
+  const run = async (fn) => { setBusy(true); try { await fn(); await load(data?.anio, asof); } catch (e) { alert(e.message); } finally { setBusy(false); } };
 
   if (!areaId) return (
     <div><h2>Mi planificación</h2>
@@ -55,11 +57,21 @@ export default function MiPlanificacion({ boot }) {
           <h2>Mi planificación · {areaObj?.nombre}</h2>
           <p className="sub">Cargá los objetivos de tu área por trimestre, dividí cada uno en metas y marcalas a medida que las cerrás (arman el %). Marcá si hay otras áreas involucradas.</p>
         </div>
-        <div style={{ display: 'flex', gap: 6 }}>
-          <button className="btn btn-sm" onClick={() => load(anio - 1)}>‹ {anio - 1}</button>
-          <button className="btn btn-sm" onClick={() => load(anio + 1)}>{anio + 1} ›</button>
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+          <label className="muted small" style={{ display: 'flex', alignItems: 'center', gap: 4 }} title="Ver el plan como estaba a una fecha (solo lectura)">
+            ver a fecha <input type="date" value={asof || ''} onChange={(e) => verAsof(e.target.value)} style={{ padding: '3px 5px', fontSize: 12 }} />
+          </label>
+          <button className="btn btn-sm" onClick={() => load(anio - 1, asof)}>‹ {anio - 1}</button>
+          <button className="btn btn-sm" onClick={() => load(anio + 1, asof)}>{anio + 1} ›</button>
         </div>
       </div>
+
+      {asof && (
+        <div style={{ marginTop: 12, background: '#FFF3D6', border: '1px solid #E6C766', borderRadius: 10, padding: '9px 13px', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 13, color: '#7a5a00' }}>👁 Estás viendo el plan <b>como estaba al {asof}</b> (solo lectura — objetivos y metas creados hasta esa fecha).</span>
+          <button className="btn btn-sm" style={{ marginLeft: 'auto' }} onClick={() => verAsof(null)}>volver al plan actual</button>
+        </div>
+      )}
 
       {teNec.length > 0 && (
         <div className="tcard" style={{ marginTop: 14, borderLeft: '3px solid #1F86D6' }}>
@@ -97,6 +109,7 @@ export default function MiPlanificacion({ boot }) {
         </div>
       )}
 
+      <div style={{ pointerEvents: asof ? 'none' : 'auto' }}>
       {QOPTS.map((q) => {
         const items = data.objectives.filter((a) => a.trimestre === q).sort((a, b) => PRANK[a.prioridad || 'media'] - PRANK[b.prioridad || 'media']);
         return (
@@ -193,6 +206,7 @@ export default function MiPlanificacion({ boot }) {
           </div>
         );
       })}
+      </div>
     </div>
   );
 }

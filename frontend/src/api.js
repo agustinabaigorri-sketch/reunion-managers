@@ -55,7 +55,7 @@ const realApi = {
   okrUpdAO: (id, d) => req('PATCH', '/okr/area-objectives/' + id, d),
   okrDelAO: (id) => req('DELETE', '/okr/area-objectives/' + id),
   okrMine: () => req('GET', '/okr/area-objectives/mine'),
-  okrMyPlan: (anio) => req('GET', '/okr/my-plan' + (anio ? '?anio=' + anio : '')),
+  okrMyPlan: (anio, asof) => { const p = new URLSearchParams(); if (anio) p.set('anio', anio); if (asof) p.set('asof', asof); const qs = p.toString(); return req('GET', '/okr/my-plan' + (qs ? '?' + qs : '')); },
   okrColabMine: (anio) => req('GET', '/okr/colab/mine' + (anio ? '?anio=' + anio : '')),
   okrColabAgenda: () => req('GET', '/okr/colab/agenda'),
   okrColabAdd: (d) => req('POST', '/okr/colab', d),
