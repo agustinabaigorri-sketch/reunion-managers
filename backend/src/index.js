@@ -415,6 +415,14 @@ app.get('/okr/colab/agenda', auth, wrap(async (req, res) => {
      order by vence nulls last, c.id`, [req.user.area_id]);
   res.json(rows);
 }));
+// Pedidos MÍOS (de mis objetivos) que otra área rechazó — para avisar al área dueña.
+app.get('/okr/colab/rejected', auth, wrap(async (req, res) => {
+  const { rows } = await q(
+    `select c.id, c.pedido, c.motivo, c.area_id as by_area_id, ao.titulo as objetivo, ao.trimestre
+     from okr_colab c join okr_area_objectives ao on ao.id = c.area_objective_id
+     where ao.area_id = $1 and c.estado = 'rechazado' order by c.id`, [req.user.area_id]);
+  res.json(rows);
+}));
 async function aoOfColab(id) { const { rows } = await q('select ao.* from okr_colab c join okr_area_objectives ao on ao.id=c.area_objective_id where c.id=$1', [id]); return rows[0]; }
 // Sumar un área involucrada a un objetivo (lo hace el dueño del objetivo).
 app.post('/okr/colab', auth, wrap(async (req, res) => {

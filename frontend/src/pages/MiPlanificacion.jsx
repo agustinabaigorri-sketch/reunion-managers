@@ -25,6 +25,9 @@ function calidad(a) {
 export default function MiPlanificacion({ boot }) {
   const [data, setData] = useState(null);
   const [teNec, setTeNec] = useState([]);
+  const [rejected, setRejected] = useState([]);
+  const [rejectFor, setRejectFor] = useState(null);
+  const [motivoTxt, setMotivoTxt] = useState('');
   const [asof, setAsof] = useState(null);
   const [busy, setBusy] = useState(false);
   const areaId = boot.me.area_id;
@@ -33,7 +36,7 @@ export default function MiPlanificacion({ boot }) {
   const otras = boot.areas.filter((a) => a.id !== areaId);
   const areaById = (id) => boot.areas.find((a) => a.id === id) || { nombre: '—', color: 'var(--muted)' };
 
-  const load = useCallback((anio, asofDate) => Promise.all([api.okrMyPlan(anio, asofDate), api.okrColabMine(anio)]).then(([d, tn]) => { setData(d); setTeNec(tn); }), []);
+  const load = useCallback((anio, asofDate) => Promise.all([api.okrMyPlan(anio, asofDate), api.okrColabMine(anio), api.okrColabRejected()]).then(([d, tn, rj]) => { setData(d); setTeNec(tn); setRejected(rj); }), []);
   useEffect(() => { load(); }, [load]);
   const verAsof = (v) => { setAsof(v || null); load(data?.anio, v || null); };
   const run = async (fn) => { setBusy(true); try { await fn(); await load(data?.anio, asof); } catch (e) { alert(e.message); } finally { setBusy(false); } };
@@ -71,6 +74,32 @@ export default function MiPlanificacion({ boot }) {
         </div>
       )}
 
+      {rejected.length > 0 && (
+        <div className="tcard" style={{ marginTop: 14, borderLeft: '3px solid var(--red)', background: 'var(--red-bg, #FDECEC)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 4 }}>
+            <span style={{ width: 9, height: 9, borderRadius: '50%', background: 'var(--red)' }} />
+            <b style={{ fontSize: 14 }}>Te rechazaron un pedido</b>
+            <span className="muted small">· reasigná a otra área</span>
+          </div>
+          {rejected.map((r) => {
+            const ba = areaById(r.by_area_id);
+            return (
+              <div key={r.id} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', padding: '8px 0', borderTop: '1px solid var(--line)', flexWrap: 'wrap' }}>
+                <div style={{ flex: 1, minWidth: 180 }}>
+                  <div className="small"><b>{ba.nombre}</b> rechazó tu pedido en <b>{r.objetivo || '(sin título)'}</b> <span className="muted">· Q{r.trimestre}</span></div>
+                  <div className="small muted" style={{ marginTop: 2 }}>pedido: {r.pedido || <i>(sin detalle)</i>} — <span style={{ color: 'var(--red)' }}>motivo: {r.motivo || 'sin motivo'}</span></div>
+                </div>
+                <select value="" onChange={(e) => { if (e.target.value) run(() => api.okrColabUpd(r.id, { area_id: Number(e.target.value) })); }} style={{ fontSize: 12, padding: '4px 7px', flex: 'none' }}>
+                  <option value="">reasignar a…</option>
+                  {otras.filter((ar) => ar.id !== r.by_area_id).map((ar) => <option key={ar.id} value={ar.id}>{ar.nombre}</option>)}
+                </select>
+                <button className="btn btn-sm btn-ghost" onClick={() => run(() => api.okrColabDel(r.id))} title="descartar el pedido" style={{ flex: 'none' }}>×</button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
       {teNec.length > 0 && (
         <div className="tcard" style={{ marginTop: 14, borderLeft: '3px solid #1F86D6' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 4 }}>
@@ -99,7 +128,7 @@ export default function MiPlanificacion({ boot }) {
                         </div>
                       : <div style={{ display: 'flex', gap: 4, flex: 'none' }}>
                           <button className="btn btn-sm" onClick={() => run(() => api.okrColabUpd(t.id, { estado: 'tomado' }))}>tomarlo</button>
-                          <button className="btn btn-sm btn-ghost" onClick={() => { const mo = prompt('¿Por qué no lo tomás? (motivo del rechazo)'); if (mo !== null) run(() => api.okrColabUpd(t.id, { estado: 'rechazado', motivo: mo })); }} title="rechazar">rechazar</button>
+                          <button className="btn btn-sm btn-ghost" onClick={() => { setRejectFor(t); setMotivoTxt(''); }} title="rechazar">rechazar</button>
                         </div>}
               </div>
             );
@@ -205,6 +234,22 @@ export default function MiPlanificacion({ boot }) {
         );
       })}
       </div>
+
+      {rejectFor && (
+        <div className="sheet-ov" onClick={() => setRejectFor(null)}>
+          <div className="sheet" onClick={(e) => e.stopPropagation()}>
+            <div className="sheet-h">Rechazar el pedido de {areaById(rejectFor.owner_area_id).nombre}</div>
+            <div style={{ padding: '2px 2px 8px', fontSize: 13, color: 'var(--muted)' }}>
+              «{rejectFor.pedido || 'sin detalle'}» — en <b>{rejectFor.objetivo}</b>. Contales por qué no lo tomás:
+            </div>
+            <textarea value={motivoTxt} onChange={(e) => setMotivoTxt(e.target.value)} autoFocus placeholder="Ej.: no tenemos capacidad este trimestre, lo vemos el que viene" rows={3} style={{ width: '100%', padding: '8px 10px', fontSize: 13, borderRadius: 8, resize: 'vertical' }} />
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 10 }}>
+              <button className="btn btn-sm btn-ghost" onClick={() => setRejectFor(null)}>cancelar</button>
+              <button className="btn btn-sm" style={{ background: 'var(--red)', color: '#fff', borderColor: 'var(--red)' }} disabled={!motivoTxt.trim()} onClick={() => { const t = rejectFor; setRejectFor(null); run(() => api.okrColabUpd(t.id, { estado: 'rechazado', motivo: motivoTxt.trim() })); }}>rechazar y avisar</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

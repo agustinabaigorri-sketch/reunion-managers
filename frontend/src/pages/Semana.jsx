@@ -23,6 +23,7 @@ export default function Semana({ boot, week, weekObj }) {
   const [objs, setObjs] = useState([]);
   const [metas, setMetas] = useState([]);
   const [colabs, setColabs] = useState([]);
+  const [tagSug, setTagSug] = useState(null);
   const dirty = useRef(false);
   const canLink = objs.length > 0;
 
@@ -96,6 +97,9 @@ export default function Semana({ boot, week, weekObj }) {
     ...dueColabs.map((c) => ({ key: 'c' + c.id, kind: 'colab', id: c.id, titulo: c.pedido, sub: c.objetivo, tag: c.owner_area_nombre, vence: c.vence })),
   ].sort((a, b) => (a.vence || '9999-99-99').localeCompare(b.vence || '9999-99-99'));
   const doneMeta = (id) => api.okrMetaUpd(id, { hecho: true }).then(() => api.okrMyMetas().then(setMetas)).catch(() => {});
+  const tagExact = (v) => boot.tags.find((t) => stripTag(t.name) === stripTag(v));
+  const tagSimilar = (v) => { const nv = stripTag(v); if (!nv) return []; return boot.tags.map((t) => t.name).filter((name) => { const nn = stripTag(name); if (nn === nv) return false; return nn.includes(nv) || nv.includes(nn) || lev(nn, nv) <= (nv.length <= 4 ? 1 : 2); }).slice(0, 6); };
+  const addTag = (k, tag) => upd((c) => { const t2 = item(c, k); if (!t2.tags.includes(tag)) t2.tags.push(tag); });
   const doneColab = (id) => api.okrColabUpd(id, { estado: 'hecho' }).then(() => api.okrColabAgenda().then(setColabs)).catch(() => {});
   const moveItem = async (it, dir) => {
     if (!weekObj) return;
@@ -257,11 +261,15 @@ export default function Semana({ boot, week, weekObj }) {
                         list="taglist"
                         placeholder="+ etiqueta"
                         onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            const v = norm(e.target.value);
-                            if (v) upd((c) => { const t2 = item(c, it._k); if (!t2.tags.includes(v)) t2.tags.push(v); });
-                            e.target.value = '';
-                          }
+                          if (e.key !== 'Enter') return;
+                          const v = norm(e.target.value);
+                          e.target.value = '';
+                          if (!v) return;
+                          const ex = tagExact(v);
+                          if (ex) { addTag(it._k, ex.name); return; }        // ya existe (misma etiqueta)
+                          const sims = tagSimilar(v);
+                          if (sims.length) { setTagSug({ itemKey: it._k, value: v, matches: sims }); return; }  // hay parecidas → preguntar
+                          addTag(it._k, v);                                    // nueva sin similares
                         }}
                       />
                     </div>
@@ -313,6 +321,25 @@ export default function Semana({ boot, week, weekObj }) {
           </div>
         </div>
       )}
+
+      {tagSug && (
+        <div className="sheet-ov" onClick={() => setTagSug(null)}>
+          <div className="sheet" onClick={(e) => e.stopPropagation()}>
+            <div className="sheet-h">Ya existe algo parecido a “{tagSug.value}”</div>
+            <div style={{ padding: '2px 2px 10px', fontSize: 13, color: 'var(--muted)' }}>Para no duplicar etiquetas, ¿usás una de estas?</div>
+            {tagSug.matches.map((m) => (
+              <button key={m} className="sheet-opt" onClick={() => { addTag(tagSug.itemKey, m); setTagSug(null); }}>
+                <span className="dot" style={{ background: L.tagColor(m), width: 10, height: 10 }} />
+                {m}
+                <span className="sheet-chk">usar esta</span>
+              </button>
+            ))}
+            <button className="sheet-opt" style={{ marginTop: 6, borderTop: '1px solid var(--line)', color: '#1F86D6', fontWeight: 600 }} onClick={() => { addTag(tagSug.itemKey, tagSug.value); setTagSug(null); }}>
+              + Agregar “{tagSug.value}” como etiqueta nueva
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -322,6 +349,16 @@ function norm(v) {
   if (!v) return '';
   if (!v.startsWith('#')) v = '#' + v;
   return v.toLowerCase();
+}
+// Comparación de etiquetas ignorando #, mayúsculas y acentos, para detectar similares.
+const DIACRITICS = new RegExp('[\\u0300-\\u036f]', 'g');
+function stripTag(s) { return (s || '').replace(/^#/, '').toLowerCase().normalize('NFD').replace(DIACRITICS, ''); }
+function lev(a, b) {
+  const m = a.length, n = b.length;
+  const d = Array.from({ length: m + 1 }, (_, i) => { const row = new Array(n + 1).fill(0); row[0] = i; return row; });
+  for (let j = 1; j <= n; j++) d[0][j] = j;
+  for (let i = 1; i <= m; i++) for (let j = 1; j <= n; j++) d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+  return d[m][n];
 }
 function normalize(e) {
   return {

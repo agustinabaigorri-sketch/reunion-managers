@@ -44,8 +44,8 @@ export default function App() {
   if (!boot || !selected) return <div style={{ padding: 40, color: 'var(--muted)' }}>Cargando…</div>;
 
   const isAdmin = boot.me.rol === 'admin';
-  const tabs = [['carga', 'Mi semana'], ['reunion', 'Vista reunión'], ['metricas', 'Métricas'], ['miplan', 'Mi planificación'], ['trabajo', 'Modo trabajo']];
-  if (isAdmin) tabs.push(['okr', 'Planificación empresa'], ['tareas', 'Mis tareas'], ['admin', 'Administración']);
+  const tabs = [['carga', 'Mi semana'], ['reunion', 'Vista reunión'], ['metricas', 'Métricas'], ['miplan', 'Mi planificación'], ['trabajo', 'Modo trabajo'], ['tareas', 'Mis tareas']];
+  if (isAdmin) tabs.push(['okr', 'Planificación empresa'], ['admin', 'Administración']);
   const logout = () => {
     setToken(null);
     setAuthed(false);
@@ -94,7 +94,7 @@ export default function App() {
         {view === 'carga' && <Semana boot={boot} week={selected.id} weekObj={selected} />}
         {view === 'reunion' && <Reunion boot={boot} week={selected.id} />}
         {view === 'metricas' && <Metricas boot={boot} week={selected.id} />}
-        {view === 'tareas' && isAdmin && <MisTareas />}
+        {view === 'tareas' && <MisTareas />}
         {view === 'miplan' && <MiPlanificacion boot={boot} />}
         {view === 'trabajo' && <ModoTrabajo boot={boot} />}
         {view === 'okr' && isAdmin && <Planificacion boot={boot} />}
