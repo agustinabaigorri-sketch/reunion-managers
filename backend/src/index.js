@@ -352,9 +352,9 @@ app.patch('/okr/area-objectives/:id', auth, wrap(async (req, res) => {
     `update okr_area_objectives set titulo=coalesce($2,titulo), objective_id=coalesce($3,objective_id),
        trimestre=coalesce($4,trimestre), meta=coalesce($5,meta), area_id=coalesce($6,area_id),
        colab_areas = case when $7 then $8::int[] else colab_areas end,
-       prioridad=coalesce($9,prioridad), detalle=coalesce($10,detalle)
+       prioridad=coalesce($9,prioridad), detalle=coalesce($10,detalle), anio=coalesce($11,anio)
      where id=$1 returning *`,
-    [req.params.id, b.titulo ?? null, b.objective_id ?? null, b.trimestre ?? null, b.meta ?? null, area, hasC, hasC ? b.colab_areas : null, b.prioridad ?? null, b.detalle ?? null]);
+    [req.params.id, b.titulo ?? null, b.objective_id ?? null, b.trimestre ?? null, b.meta ?? null, area, hasC, hasC ? b.colab_areas : null, b.prioridad ?? null, b.detalle ?? null, b.anio ?? null]);
   res.json(rows[0]);
 }));
 app.delete('/okr/area-objectives/:id', auth, wrap(async (req, res) => {

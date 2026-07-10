@@ -82,8 +82,11 @@ export default function MiPlanificacion({ boot }) {
                     <div className="bar-track"><div className="bar-fill" style={{ width: aoPct(a) + '%', background: color }} /></div>
                     <b style={{ fontSize: 13, minWidth: 38, textAlign: 'right' }}>{aoPct(a)}%</b>
                   </div>
-                  <select value={a.trimestre} onChange={(e) => run(() => api.okrUpdAO(a.id, { trimestre: Number(e.target.value) }))} style={{ padding: '5px 7px' }}>
+                  <select value={a.trimestre} onChange={(e) => run(() => api.okrUpdAO(a.id, { trimestre: Number(e.target.value) }))} title="mover de trimestre" style={{ padding: '5px 7px' }}>
                     {QOPTS.map((qq) => <option key={qq} value={qq}>Q{qq}</option>)}
+                  </select>
+                  <select value={a.anio || anio} onChange={(e) => run(() => api.okrUpdAO(a.id, { anio: Number(e.target.value) }))} title="mover de año" style={{ padding: '5px 7px' }}>
+                    {[anio - 1, anio, anio + 1, anio + 2].map((y) => <option key={y} value={y}>{y}</option>)}
                   </select>
                   <button className="btn btn-sm btn-ghost" onClick={() => confirm('¿Eliminar objetivo y sus metas?') && run(() => api.okrDelAO(a.id))} title="eliminar">×</button>
                 </div>
