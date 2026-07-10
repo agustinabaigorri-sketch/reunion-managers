@@ -17,7 +17,7 @@ function calidad(a) {
     metas.some((m) => /\d/.test(m.titulo)),
     (a.titulo || '').trim().length >= 15 && !OPVERBS.includes(first),
   ];
-  const txt = ['al menos 3 metas', 'alguna meta con fecha', 'una meta medible (con número)', 'redactarlo como objetivo (no tarea)'];
+  const txt = ['al menos 3 metas', 'alguna meta con fecha', 'una meta medible (con número)', 'redactalo como objetivo, no como tarea (ej.: “Ser referentes en robótica educativa”, no “llamar a 5 escuelas”)'];
   const n = checks.filter(Boolean).length;
   return { color: n === 4 ? '#2e9e5b' : n >= 2 ? '#B5780B' : '#C0392B', label: n === 4 ? 'Bien planteado' : n >= 2 ? 'Casi' : 'Revisá', falta: txt.filter((_, i) => !checks[i]) };
 }
