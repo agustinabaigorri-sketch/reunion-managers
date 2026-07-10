@@ -2,7 +2,7 @@
 // Se activa con VITE_DEMO=1 (ver `npm run demo`). Los datos viven en localStorage.
 export const DEMO = String(import.meta.env.VITE_DEMO) === '1' || String(import.meta.env.VITE_DEMO) === 'true';
 
-const KEY = 'rm_demo_store_v2';
+const KEY = 'rm_demo_store_v3';
 const UKEY = 'rm_demo_uid';
 let _id = 5000;
 const iid = () => ++_id;
@@ -124,10 +124,15 @@ function ensureOkr() {
     { id: 9002, anio: 2026, titulo: 'Mejorar la eficiencia operativa', prioridad: 'media', orden: 1 },
   ];
   store.okrAOs = [
-    { id: 9201, objective_id: 9001, area_id: 2, anio: 2026, trimestre: 1, titulo: 'Sumar 50 escuelas nuevas', meta: 10, orden: 0 },
-    { id: 9202, objective_id: 9001, area_id: 3, anio: 2026, trimestre: 1, titulo: 'Onboarding self-service para escuelas', meta: 8, orden: 1 },
-    { id: 9203, objective_id: 9001, area_id: 2, anio: 2026, trimestre: 2, titulo: 'Reactivar 30 escuelas dormidas', meta: 6, orden: 2 },
-    { id: 9204, objective_id: 9002, area_id: 1, anio: 2026, trimestre: 1, titulo: 'Automatizar cierres contables', meta: 5, orden: 3 },
+    { id: 9201, objective_id: 9001, area_id: 2, anio: 2026, trimestre: 1, titulo: 'Sumar 50 escuelas nuevas', meta: 10, colab_areas: [], orden: 0 },
+    { id: 9202, objective_id: 9001, area_id: 3, anio: 2026, trimestre: 1, titulo: 'Onboarding self-service para escuelas', meta: 8, colab_areas: [], orden: 1 },
+    { id: 9203, objective_id: 9001, area_id: 2, anio: 2026, trimestre: 2, titulo: 'Reactivar 30 escuelas dormidas', meta: 6, colab_areas: [], orden: 2 },
+    { id: 9204, objective_id: 9002, area_id: 1, anio: 2026, trimestre: 3, titulo: 'Automatizar cierres contables', meta: 5, colab_areas: [3], orden: 3 },
+  ];
+  store.okrMetas = [
+    { id: 9301, area_objective_id: 9204, titulo: 'Definir plantilla de cierre', hecho: true, orden: 0 },
+    { id: 9302, area_objective_id: 9204, titulo: 'Automatizar en el ERP', hecho: false, orden: 1 },
+    { id: 9303, area_objective_id: 9204, titulo: 'Validar con contable', hecho: false, orden: 2 },
   ];
   store.umbral = 70;
   persist();
@@ -197,8 +202,12 @@ export const demoApi = {
   okrAddKr: (d) => { ensureOkr(); store.okrKrs.push({ id: iid(), objective_id: Number(d.objective_id), titulo: d.titulo || '', unidad: d.unidad || '', valor_inicial: +d.valor_inicial || 0, valor_objetivo: +d.valor_objetivo || 100, valor_actual: +d.valor_actual || 0, orden: store.okrKrs.length }); persist(); return wait({ ok: true }); },
   okrUpdKr: (id, d) => { ensureOkr(); const k = store.okrKrs.find((x) => x.id === Number(id)); if (k) ['titulo', 'unidad', 'valor_inicial', 'valor_objetivo', 'valor_actual'].forEach((f) => { if (d[f] != null) k[f] = f.startsWith('valor') ? +d[f] : d[f]; }); persist(); return wait(k); },
   okrDelKr: (id) => { ensureOkr(); store.okrKrs = store.okrKrs.filter((x) => x.id !== Number(id)); store.okrAOs = store.okrAOs.filter((a) => a.kr_id !== Number(id)); persist(); return wait({ ok: true }); },
-  okrAddAO: (d) => { ensureOkr(); const u = me(); const areaId = u.rol === 'admin' ? (d.area_id ? Number(d.area_id) : null) : u.area_id; store.okrAOs.push({ id: iid(), objective_id: Number(d.objective_id), area_id: areaId, anio: Number(d.anio) || 2026, trimestre: Number(d.trimestre) || 1, titulo: d.titulo || '', meta: Number(d.meta) || 5, orden: store.okrAOs.length }); persist(); return wait({ ok: true }); },
-  okrUpdAO: (id, d) => { ensureOkr(); const a = store.okrAOs.find((x) => x.id === Number(id)); if (a) ['titulo', 'area_id', 'trimestre', 'meta', 'objective_id'].forEach((f) => { if (d[f] != null) a[f] = f === 'titulo' ? d[f] : Number(d[f]); }); persist(); return wait(a); },
+  okrAddAO: (d) => { ensureOkr(); const u = me(); const areaId = u.rol === 'admin' ? (d.area_id ? Number(d.area_id) : null) : u.area_id; store.okrAOs.push({ id: iid(), objective_id: d.objective_id ? Number(d.objective_id) : null, area_id: areaId, anio: Number(d.anio) || 2026, trimestre: Number(d.trimestre) || 1, titulo: d.titulo || '', meta: Number(d.meta) || 5, colab_areas: [], orden: store.okrAOs.length }); persist(); return wait({ ok: true }); },
+  okrUpdAO: (id, d) => { ensureOkr(); const a = store.okrAOs.find((x) => x.id === Number(id)); if (a) { ['titulo', 'area_id', 'trimestre', 'meta', 'objective_id'].forEach((f) => { if (d[f] != null) a[f] = f === 'titulo' ? d[f] : Number(d[f]); }); if ('colab_areas' in d) a.colab_areas = d.colab_areas; } persist(); return wait(a); },
+  okrMyPlan: (anio) => { ensureOkr(); const a = me().area_id; const yr = Number(anio) || 2026; const objs = store.okrAOs.filter((x) => x.area_id === a && x.anio === yr).map((x) => ({ ...x, colab_areas: x.colab_areas || [], metas: (store.okrMetas || []).filter((m) => m.area_objective_id === x.id) })); return wait({ anio: yr, area_id: a, objectives: objs }); },
+  okrMetaAdd: (d) => { ensureOkr(); store.okrMetas = store.okrMetas || []; store.okrMetas.push({ id: iid(), area_objective_id: Number(d.area_objective_id), titulo: d.titulo || '', hecho: false, orden: store.okrMetas.length }); persist(); return wait({ ok: true }); },
+  okrMetaUpd: (id, d) => { ensureOkr(); const m = (store.okrMetas || []).find((x) => x.id === Number(id)); if (m) { if (d.titulo != null) m.titulo = d.titulo; if (d.hecho != null) m.hecho = !!d.hecho; } persist(); return wait(m); },
+  okrMetaDel: (id) => { ensureOkr(); store.okrMetas = (store.okrMetas || []).filter((x) => x.id !== Number(id)); persist(); return wait({ ok: true }); },
   okrDelAO: (id) => { ensureOkr(); store.okrAOs = store.okrAOs.filter((x) => x.id !== Number(id)); persist(); return wait({ ok: true }); },
   okrMine: () => { ensureOkr(); const u = me(); return wait(store.okrAOs.filter((a) => a.area_id === u.area_id).map((a) => ({ id: a.id, titulo: a.titulo, trimestre: a.trimestre, obj_titulo: (store.okrObjectives.find((o) => o.id === a.objective_id) || {}).titulo }))); },
   okrSettings: () => { ensureOkr(); return wait({ umbral: store.umbral ?? 70 }); },

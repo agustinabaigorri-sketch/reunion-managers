@@ -311,7 +311,7 @@ app.post('/okr/area-objectives', auth, wrap(async (req, res) => {
   if (!canAO(req.user, areaId)) return res.status(403).json({ error: 'solo podés cargar objetivos de tu área' });
   const { rows } = await q(
     'insert into okr_area_objectives(objective_id,area_id,anio,trimestre,titulo,meta) values($1,$2,$3,$4,$5,$6) returning *',
-    [b.objective_id, areaId, Number(b.anio) || new Date().getFullYear(), b.trimestre || 1, b.titulo || '', b.meta || 5]);
+    [b.objective_id || null, areaId, Number(b.anio) || new Date().getFullYear(), b.trimestre || 1, b.titulo || '', b.meta || 5]);
   res.json(rows[0]);
 }));
 app.patch('/okr/area-objectives/:id', auth, wrap(async (req, res) => {
@@ -320,11 +320,13 @@ app.patch('/okr/area-objectives/:id', auth, wrap(async (req, res) => {
   if (!canAO(req.user, cur[0].area_id)) return res.status(403).json({ error: 'solo tu área' });
   const b = req.body;
   const area = req.user.rol === 'admin' ? (b.area_id ?? null) : null; // managers no cambian de área
+  const hasC = Object.prototype.hasOwnProperty.call(b, 'colab_areas');
   const { rows } = await q(
     `update okr_area_objectives set titulo=coalesce($2,titulo), objective_id=coalesce($3,objective_id),
-       trimestre=coalesce($4,trimestre), meta=coalesce($5,meta), area_id=coalesce($6,area_id)
+       trimestre=coalesce($4,trimestre), meta=coalesce($5,meta), area_id=coalesce($6,area_id),
+       colab_areas = case when $7 then $8::int[] else colab_areas end
      where id=$1 returning *`,
-    [req.params.id, b.titulo ?? null, b.objective_id ?? null, b.trimestre ?? null, b.meta ?? null, area]);
+    [req.params.id, b.titulo ?? null, b.objective_id ?? null, b.trimestre ?? null, b.meta ?? null, area, hasC, hasC ? b.colab_areas : null]);
   res.json(rows[0]);
 }));
 app.delete('/okr/area-objectives/:id', auth, wrap(async (req, res) => {
@@ -338,11 +340,44 @@ app.delete('/okr/area-objectives/:id', auth, wrap(async (req, res) => {
 // Objetivos de mi área (para vincular en la carga semanal).
 app.get('/okr/area-objectives/mine', auth, wrap(async (req, res) => {
   const { rows } = await q(
-    `select ao.id, ao.titulo, ao.trimestre, o.titulo as obj_titulo
-     from okr_area_objectives ao join okr_objectives o on o.id = ao.objective_id
-     where ao.area_id = $1 and ao.anio = $2 order by ao.trimestre, ao.id`,
+    `select id, titulo, trimestre from okr_area_objectives
+     where area_id = $1 and anio = $2 order by trimestre, id`,
     [req.user.area_id, new Date().getFullYear()]);
   res.json(rows);
+}));
+
+// Plan de mi área con sub-metas (para "Mi planificación").
+app.get('/okr/my-plan', auth, wrap(async (req, res) => {
+  const anio = Number(req.query.anio) || new Date().getFullYear();
+  const aos = (await q('select * from okr_area_objectives where area_id=$1 and anio=$2 order by trimestre,orden,id', [req.user.area_id, anio])).rows;
+  const ids = aos.map((a) => a.id);
+  const metas = ids.length ? (await q('select * from okr_metas where area_objective_id = any($1) order by orden,id', [ids])).rows : [];
+  aos.forEach((a) => (a.metas = metas.filter((m) => m.area_objective_id === a.id)));
+  res.json({ anio, area_id: req.user.area_id, objectives: aos });
+}));
+
+// Sub-metas de un objetivo de área
+async function aoOfMeta(metaId) { const { rows } = await q('select ao.* from okr_metas m join okr_area_objectives ao on ao.id=m.area_objective_id where m.id=$1', [metaId]); return rows[0]; }
+app.post('/okr/metas', auth, wrap(async (req, res) => {
+  const { rows: aoR } = await q('select * from okr_area_objectives where id=$1', [req.body.area_objective_id]);
+  if (!aoR[0]) return res.status(404).json({ error: 'objetivo no existe' });
+  if (!canAO(req.user, aoR[0].area_id)) return res.status(403).json({ error: 'solo tu área' });
+  const { rows } = await q('insert into okr_metas(area_objective_id,titulo) values($1,$2) returning *', [req.body.area_objective_id, req.body.titulo || '']);
+  res.json(rows[0]);
+}));
+app.patch('/okr/metas/:id', auth, wrap(async (req, res) => {
+  const ao = await aoOfMeta(req.params.id);
+  if (!ao) return res.status(404).json({ error: 'no existe' });
+  if (!canAO(req.user, ao.area_id)) return res.status(403).json({ error: 'solo tu área' });
+  const b = req.body;
+  const { rows } = await q('update okr_metas set titulo=coalesce($2,titulo), hecho=coalesce($3,hecho) where id=$1 returning *', [req.params.id, b.titulo ?? null, b.hecho ?? null]);
+  res.json(rows[0]);
+}));
+app.delete('/okr/metas/:id', auth, wrap(async (req, res) => {
+  const ao = await aoOfMeta(req.params.id);
+  if (ao && !canAO(req.user, ao.area_id)) return res.status(403).json({ error: 'solo tu área' });
+  await q('delete from okr_metas where id=$1', [req.params.id]);
+  res.json({ ok: true });
 }));
 
 // --- umbral (setting) ---
