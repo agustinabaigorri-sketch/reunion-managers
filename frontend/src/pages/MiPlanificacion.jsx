@@ -24,13 +24,15 @@ function calidad(a) {
 
 export default function MiPlanificacion({ boot }) {
   const [data, setData] = useState(null);
+  const [teNec, setTeNec] = useState([]);
   const [busy, setBusy] = useState(false);
   const areaId = boot.me.area_id;
   const areaObj = boot.areas.find((a) => a.id === areaId);
   const color = areaObj?.color || 'var(--eb-green)';
   const otras = boot.areas.filter((a) => a.id !== areaId);
+  const areaById = (id) => boot.areas.find((a) => a.id === id) || { nombre: '—', color: 'var(--muted)' };
 
-  const load = useCallback((anio) => api.okrMyPlan(anio).then(setData), []);
+  const load = useCallback((anio) => Promise.all([api.okrMyPlan(anio), api.okrColabMine(anio)]).then(([d, tn]) => { setData(d); setTeNec(tn); }), []);
   useEffect(() => { load(); }, [load]);
   const run = async (fn) => { setBusy(true); try { await fn(); await load(data?.anio); } catch (e) { alert(e.message); } finally { setBusy(false); } };
 
@@ -42,12 +44,6 @@ export default function MiPlanificacion({ boot }) {
   if (!data) return <div style={{ color: 'var(--muted)' }}>Cargando…</div>;
   const anio = data.anio;
   const aoPct = (a) => { const m = a.metas || []; return m.length ? Math.round(m.reduce((s, x) => s + (x.avance || 0), 0) / m.length) : 0; };
-
-  const toggleColab = (a, id) => {
-    const cur = a.colab_areas || [];
-    const next = cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id];
-    run(() => api.okrUpdAO(a.id, { colab_areas: next }));
-  };
 
   return (
     <div style={{ opacity: busy ? 0.6 : 1 }}>
@@ -61,6 +57,31 @@ export default function MiPlanificacion({ boot }) {
           <button className="btn btn-sm" onClick={() => load(anio + 1)}>{anio + 1} ›</button>
         </div>
       </div>
+
+      {teNec.length > 0 && (
+        <div className="tcard" style={{ marginTop: 14, borderLeft: '3px solid #1F86D6' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 4 }}>
+            <span style={{ width: 9, height: 9, borderRadius: '50%', background: '#1F86D6' }} />
+            <b style={{ fontSize: 14 }}>Otras áreas te necesitan</b>
+            <span className="muted small">· {teNec.filter((t) => t.estado !== 'tomado').length} pendiente(s)</span>
+          </div>
+          {teNec.map((t) => {
+            const oa = areaById(t.owner_area_id);
+            return (
+              <div key={t.id} style={{ display: 'flex', gap: 11, alignItems: 'flex-start', padding: '9px 0', borderTop: '1px solid var(--line)' }}>
+                <span style={{ width: 28, height: 28, borderRadius: 8, background: oa.color, color: '#fff', fontSize: 10.5, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 'none' }}>{(oa.nombre || '').slice(0, 2).toUpperCase()}</span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div className="small"><b>{oa.nombre}</b> te necesita en <b>{t.objetivo || '(sin título)'}</b> <span className="muted">· Q{t.trimestre}</span></div>
+                  <div className="small muted" style={{ marginTop: 2 }}>→ te pide: {t.pedido ? <span style={{ color: 'var(--text)' }}>{t.pedido}</span> : <i>(sin detalle todavía)</i>}</div>
+                </div>
+                {t.estado === 'tomado'
+                  ? <button className="btn btn-sm btn-ghost" onClick={() => run(() => api.okrColabUpd(t.id, { estado: 'pendiente' }))} title="volver a pendiente" style={{ color: '#2e9e5b', flex: 'none' }}>✓ tomado</button>
+                  : <button className="btn btn-sm" onClick={() => run(() => api.okrColabUpd(t.id, { estado: 'tomado' }))} style={{ flex: 'none' }}>tomarlo</button>}
+              </div>
+            );
+          })}
+        </div>
+      )}
 
       {QOPTS.map((q) => {
         const items = data.objectives.filter((a) => a.trimestre === q);
@@ -117,18 +138,24 @@ export default function MiPlanificacion({ boot }) {
                   <button className="btn btn-sm btn-ghost" style={{ marginTop: 2 }} onClick={() => run(() => api.okrMetaAdd({ area_objective_id: a.id, titulo: '' }))}>+ meta</button>
                 </div>
 
-                {/* otras áreas involucradas */}
-                <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                  <span className="muted small">Otras áreas involucradas:</span>
-                  {otras.map((ar) => {
-                    const on = (a.colab_areas || []).includes(ar.id);
+                {/* otras áreas involucradas: por cada una, qué necesito */}
+                <div style={{ marginTop: 12 }}>
+                  <div className="muted small" style={{ marginBottom: 4 }}>Otras áreas involucradas — aclará qué necesitás de cada una:</div>
+                  {(a.colabs || []).map((c) => {
+                    const ar = areaById(c.area_id);
                     return (
-                      <button key={ar.id} onClick={() => toggleColab(a, ar.id)}
-                        style={{ fontSize: 11.5, padding: '3px 9px', borderRadius: 20, cursor: 'pointer', border: '1px solid ' + (on ? ar.color : 'var(--line-2)'), background: on ? ar.color : 'var(--surface)', color: on ? '#fff' : 'var(--muted)', fontWeight: 500 }}>
-                        {ar.nombre}
-                      </button>
+                      <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '5px 0', flexWrap: 'wrap' }}>
+                        <span style={{ fontSize: 11.5, fontWeight: 500, color: '#fff', background: ar.color, padding: '3px 10px', borderRadius: 20, flex: 'none' }}>{ar.nombre}</span>
+                        <input type="text" defaultValue={c.pedido || ''} key={c.pedido} placeholder="¿qué necesitás de esta área?" onBlur={(e) => e.target.value !== (c.pedido || '') && run(() => api.okrColabUpd(c.id, { pedido: e.target.value }))} style={{ flex: 1, minWidth: 180, padding: '4px 8px', fontSize: 12.5 }} />
+                        {c.estado === 'tomado' && <span style={{ fontSize: 11, color: '#2e9e5b', fontWeight: 600, flex: 'none' }}>✓ tomado</span>}
+                        <button className="btn btn-sm btn-ghost" onClick={() => run(() => api.okrColabDel(c.id))} title="quitar área">×</button>
+                      </div>
                     );
                   })}
+                  <select value="" onChange={(e) => { if (e.target.value) run(() => api.okrColabAdd({ area_objective_id: a.id, area_id: Number(e.target.value) })); }} style={{ padding: '4px 8px', fontSize: 12, marginTop: 3 }}>
+                    <option value="">+ sumar área involucrada…</option>
+                    {otras.filter((ar) => !(a.colabs || []).some((c) => c.area_id === ar.id)).map((ar) => <option key={ar.id} value={ar.id}>{ar.nombre}</option>)}
+                  </select>
                 </div>
               </div>
             ))}

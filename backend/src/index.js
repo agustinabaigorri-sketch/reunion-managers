@@ -380,8 +380,53 @@ app.get('/okr/my-plan', auth, wrap(async (req, res) => {
   const aos = (await q('select * from okr_area_objectives where area_id=$1 and anio=$2 order by trimestre,orden,id', [req.user.area_id, anio])).rows;
   const ids = aos.map((a) => a.id);
   const metas = ids.length ? (await q('select * from okr_metas where area_objective_id = any($1) order by orden,id', [ids])).rows : [];
-  aos.forEach((a) => (a.metas = metas.filter((m) => m.area_objective_id === a.id)));
+  const colabs = ids.length ? (await q('select id, area_objective_id, area_id, pedido, estado from okr_colab where area_objective_id = any($1) order by id', [ids])).rows : [];
+  aos.forEach((a) => { a.metas = metas.filter((m) => m.area_objective_id === a.id); a.colabs = colabs.filter((c) => c.area_objective_id === a.id); });
   res.json({ anio, area_id: req.user.area_id, objectives: aos });
+}));
+
+// --- Colaboración entre áreas: pedidos que otra área me hace en sus objetivos ---
+// Lo que otras áreas necesitan de MI área (panel "Te necesitan").
+app.get('/okr/colab/mine', auth, wrap(async (req, res) => {
+  const anio = Number(req.query.anio) || new Date().getFullYear();
+  const { rows } = await q(
+    `select c.id, c.pedido, c.estado, ao.titulo as objetivo, ao.trimestre, ao.area_id as owner_area_id
+     from okr_colab c join okr_area_objectives ao on ao.id = c.area_objective_id
+     where c.area_id = $1 and ao.anio = $2 order by c.estado desc, c.id`,
+    [req.user.area_id, anio]);
+  res.json(rows);
+}));
+async function aoOfColab(id) { const { rows } = await q('select ao.* from okr_colab c join okr_area_objectives ao on ao.id=c.area_objective_id where c.id=$1', [id]); return rows[0]; }
+// Sumar un área involucrada a un objetivo (lo hace el dueño del objetivo).
+app.post('/okr/colab', auth, wrap(async (req, res) => {
+  const { rows: aoR } = await q('select * from okr_area_objectives where id=$1', [req.body.area_objective_id]);
+  if (!aoR[0]) return res.status(404).json({ error: 'objetivo no existe' });
+  if (!canAO(req.user, aoR[0].area_id)) return res.status(403).json({ error: 'solo tu área' });
+  const { rows } = await q(
+    `insert into okr_colab(area_objective_id, area_id, pedido) values($1,$2,$3)
+     on conflict (area_objective_id, area_id) do update set pedido=excluded.pedido returning *`,
+    [req.body.area_objective_id, req.body.area_id, req.body.pedido || '']);
+  res.json(rows[0]);
+}));
+app.patch('/okr/colab/:id', auth, wrap(async (req, res) => {
+  const { rows: cR } = await q('select * from okr_colab where id=$1', [req.params.id]);
+  if (!cR[0]) return res.status(404).json({ error: 'no existe' });
+  const c = cR[0];
+  const ao = await aoOfColab(req.params.id);
+  const b = req.body;
+  // El pedido lo edita el dueño del objetivo; el estado lo marca el área involucrada (o admin).
+  if (b.pedido != null && !canAO(req.user, ao.area_id)) return res.status(403).json({ error: 'el pedido lo edita el área dueña del objetivo' });
+  if (b.estado != null && !(req.user.rol === 'admin' || req.user.area_id === c.area_id)) return res.status(403).json({ error: 'el estado lo marca el área involucrada' });
+  const { rows } = await q(
+    'update okr_colab set pedido=coalesce($2,pedido), estado=coalesce($3,estado) where id=$1 returning *',
+    [req.params.id, b.pedido ?? null, b.estado ?? null]);
+  res.json(rows[0]);
+}));
+app.delete('/okr/colab/:id', auth, wrap(async (req, res) => {
+  const ao = await aoOfColab(req.params.id);
+  if (ao && !canAO(req.user, ao.area_id)) return res.status(403).json({ error: 'solo tu área' });
+  await q('delete from okr_colab where id=$1', [req.params.id]);
+  res.json({ ok: true });
 }));
 
 // Sub-metas de un objetivo de área
