@@ -175,22 +175,24 @@ export default function Semana({ boot, week, weekObj }) {
           <div className="hero-top" style={{ alignItems: 'flex-start' }}>
             <div style={{ flex: 1 }}>
               <div className="hero-h">Esta semana y las próximas · de tus objetivos</div>
-              <div className="hero-sub">Metas con fecha para esta semana (o atrasadas) y las próximas 4 semanas. Tildá las que cierres.</div>
+              <div className="hero-sub">Metas con fecha para esta semana (o atrasadas) y las próximas 4 semanas. Tildá las que cierres.{dueMetas.length > 3 ? ` · ${dueMetas.length} en total (scrolleá)` : ''}</div>
             </div>
           </div>
-          {dueMetas.map((m) => {
-            const overdue = weekObj && m.vence < weekObj.fecha_inicio;
-            const upcoming = weekObj && m.vence > weekObj.fecha_fin;
-            const chipBg = overdue ? 'var(--red-bg)' : upcoming ? 'var(--surface-2, #eef1f4)' : 'var(--eb-green-bg)';
-            const chipFg = overdue ? 'var(--red)' : upcoming ? 'var(--muted)' : 'var(--eb-green-d)';
-            return (
-              <div className="todo" key={m.id} style={{ opacity: upcoming ? 0.72 : 1 }}>
-                <input type="checkbox" onChange={() => doneMeta(m.id)} title="marcar como hecha" />
-                <span className="txt">{m.titulo} <span className="muted">· {m.objetivo}</span></span>
-                <span className="chip" style={{ background: chipBg, color: chipFg }}>{overdue ? '⚠ ' : upcoming ? '· ' : ''}{fmtV(m.vence)}</span>
-              </div>
-            );
-          })}
+          <div style={{ maxHeight: 168, overflowY: 'auto', paddingRight: 4, marginRight: -4 }}>
+            {dueMetas.map((m) => {
+              const overdue = weekObj && m.vence < weekObj.fecha_inicio;
+              const upcoming = weekObj && m.vence > weekObj.fecha_fin;
+              const chipBg = overdue ? 'var(--red-bg)' : upcoming ? 'var(--surface-2, #eef1f4)' : 'var(--eb-green-bg)';
+              const chipFg = overdue ? 'var(--red)' : upcoming ? 'var(--muted)' : 'var(--eb-green-d)';
+              return (
+                <div className="todo" key={m.id} style={{ opacity: upcoming ? 0.72 : 1 }}>
+                  <input type="checkbox" onChange={() => doneMeta(m.id)} title="marcar como hecha" />
+                  <span className="txt">{m.titulo} <span className="muted">· {m.objetivo}</span></span>
+                  <span className="chip" style={{ background: chipBg, color: chipFg }}>{overdue ? '⚠ ' : upcoming ? '· ' : ''}{fmtV(m.vence)}</span>
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
 
