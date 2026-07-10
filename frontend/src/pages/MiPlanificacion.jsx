@@ -102,6 +102,7 @@ export default function MiPlanificacion({ boot }) {
                 {/* metas */}
                 <div style={{ marginTop: 10, marginLeft: 6, paddingLeft: 12, borderLeft: '2px solid var(--line)' }}>
                   <div className="muted small" style={{ marginBottom: 4 }}>Metas ({(a.metas || []).filter((m) => (m.avance || 0) >= 100).length}/{(a.metas || []).length} hechas):</div>
+                  {(a.metas || []).length > 0 && <div style={{ fontSize: 10, color: 'var(--hint)', width: 108, marginBottom: 1 }}>% cumplimiento</div>}
                   {(a.metas || []).map((m) => (
                     <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 9, margin: '5px 0', flexWrap: 'wrap' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6, width: 108 }} title="% de avance (100 = hecha)">
