@@ -58,9 +58,7 @@ export default function MiPlanificacion({ boot }) {
           <p className="sub">Cargá los objetivos de tu área por trimestre, dividí cada uno en metas y marcalas a medida que las cerrás (arman el %). Marcá si hay otras áreas involucradas.</p>
         </div>
         <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-          <label className="muted small" style={{ display: 'flex', alignItems: 'center', gap: 4 }} title="Ver el plan como estaba a una fecha (solo lectura)">
-            ver a fecha <input type="date" value={asof || ''} onChange={(e) => verAsof(e.target.value)} style={{ padding: '3px 5px', fontSize: 12 }} />
-          </label>
+          {/* "ver a fecha" oculto por ahora — el estado/lógica quedan dormidos (asof), se reactiva cuando lo definamos */}
           <button className="btn btn-sm" onClick={() => load(anio - 1, asof)}>‹ {anio - 1}</button>
           <button className="btn btn-sm" onClick={() => load(anio + 1, asof)}>{anio + 1} ›</button>
         </div>
