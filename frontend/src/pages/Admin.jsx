@@ -8,6 +8,7 @@ export default function Admin({ boot, reload }) {
     try { await fn(); await reload(); } catch (e) { alert(e.message); } finally { setBusy(false); }
   };
   const [newTag, setNewTag] = useState('');
+  const [newReason, setNewReason] = useState('');
   const emptyU = { email: '', nombre: '', area_id: '', rol: 'manager', password: '' };
   const [nu, setNu] = useState(emptyU);
 
@@ -106,6 +107,26 @@ export default function Admin({ boot, reload }) {
         <div style={{ marginTop: 12, display: 'flex', gap: 8 }}>
           <input type="text" placeholder="#nueva-etiqueta" value={newTag} onChange={(e) => setNewTag(e.target.value)} style={{ width: 200 }} />
           <button className="btn btn-sm" onClick={() => { if (newTag.trim()) { run(() => api.addTag({ name: newTag.trim() })); setNewTag(''); } }}>+ agregar</button>
+        </div>
+      </div>
+
+      <div className="tcard" style={{ marginTop: 14 }}>
+        <div className="tcard-h">Motivos de rechazo <span className="count">{(boot.rejectReasons || []).length}</span></div>
+        <p className="small muted" style={{ margin: '-2px 0 8px' }}>Cuando un área rechaza un pedido de colaboración, elige uno de estos motivos.</p>
+        <table className="adm">
+          <thead><tr><th>Motivo</th><th /></tr></thead>
+          <tbody>
+            {(boot.rejectReasons || []).map((r) => (
+              <tr key={r.id}>
+                <td><input type="text" defaultValue={r.texto} onBlur={(e) => e.target.value.trim() && e.target.value !== r.texto && run(() => api.updRejectReason(r.id, { texto: e.target.value.trim() }))} style={{ width: '100%' }} /></td>
+                <td style={{ textAlign: 'right' }}><button className="btn btn-sm btn-ghost" onClick={() => confirm('¿Eliminar motivo?') && run(() => api.delRejectReason(r.id))}>×</button></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <div style={{ marginTop: 10, display: 'flex', gap: 8 }}>
+          <input type="text" placeholder="Nuevo motivo de rechazo" value={newReason} onChange={(e) => setNewReason(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && newReason.trim()) { run(() => api.addRejectReason({ texto: newReason.trim() })); setNewReason(''); } }} style={{ width: 280 }} />
+          <button className="btn btn-sm" onClick={() => { if (newReason.trim()) { run(() => api.addRejectReason({ texto: newReason.trim() })); setNewReason(''); } }}>+ agregar</button>
         </div>
       </div>
     </div>

@@ -27,7 +27,6 @@ export default function MiPlanificacion({ boot }) {
   const [teNec, setTeNec] = useState([]);
   const [rejected, setRejected] = useState([]);
   const [rejectFor, setRejectFor] = useState(null);
-  const [motivoTxt, setMotivoTxt] = useState('');
   const [asof, setAsof] = useState(null);
   const [busy, setBusy] = useState(false);
   const areaId = boot.me.area_id;
@@ -128,7 +127,7 @@ export default function MiPlanificacion({ boot }) {
                         </div>
                       : <div style={{ display: 'flex', gap: 4, flex: 'none' }}>
                           <button className="btn btn-sm" onClick={() => run(() => api.okrColabUpd(t.id, { estado: 'tomado' }))}>tomarlo</button>
-                          <button className="btn btn-sm btn-ghost" onClick={() => { setRejectFor(t); setMotivoTxt(''); }} title="rechazar">rechazar</button>
+                          <button className="btn btn-sm btn-ghost" onClick={() => setRejectFor(t)} title="rechazar">rechazar</button>
                         </div>}
               </div>
             );
@@ -239,13 +238,18 @@ export default function MiPlanificacion({ boot }) {
         <div className="sheet-ov" onClick={() => setRejectFor(null)}>
           <div className="sheet" onClick={(e) => e.stopPropagation()}>
             <div className="sheet-h">Rechazar el pedido de {areaById(rejectFor.owner_area_id).nombre}</div>
-            <div style={{ padding: '2px 2px 8px', fontSize: 13, color: 'var(--muted)' }}>
-              «{rejectFor.pedido || 'sin detalle'}» — en <b>{rejectFor.objetivo}</b>. Contales por qué no lo tomás:
+            <div style={{ padding: '2px 2px 10px', fontSize: 13, color: 'var(--muted)' }}>
+              «{rejectFor.pedido || 'sin detalle'}» — en <b>{rejectFor.objetivo}</b>. Elegí el motivo:
             </div>
-            <textarea value={motivoTxt} onChange={(e) => setMotivoTxt(e.target.value)} autoFocus placeholder="Ej.: no tenemos capacidad este trimestre, lo vemos el que viene" rows={3} style={{ width: '100%', padding: '8px 10px', fontSize: 13, borderRadius: 8, resize: 'vertical' }} />
-            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 10 }}>
+            {(boot.rejectReasons || []).length === 0 && <div className="empty">No hay motivos cargados. Pedile a un administrador que los cargue en Administración.</div>}
+            {(boot.rejectReasons || []).map((r) => (
+              <button key={r.id} className="sheet-opt" onClick={() => { const t = rejectFor; setRejectFor(null); run(() => api.okrColabUpd(t.id, { estado: 'rechazado', motivo: r.texto })); }}>
+                <span className="dot" style={{ background: 'var(--red)', width: 9, height: 9 }} />
+                {r.texto}
+              </button>
+            ))}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 10 }}>
               <button className="btn btn-sm btn-ghost" onClick={() => setRejectFor(null)}>cancelar</button>
-              <button className="btn btn-sm" style={{ background: 'var(--red)', color: '#fff', borderColor: 'var(--red)' }} disabled={!motivoTxt.trim()} onClick={() => { const t = rejectFor; setRejectFor(null); run(() => api.okrColabUpd(t.id, { estado: 'rechazado', motivo: motivoTxt.trim() })); }}>rechazar y avisar</button>
             </div>
           </div>
         </div>

@@ -142,14 +142,15 @@ app.post('/me/password', auth, wrap(async (req, res) => {
 }));
 
 app.get('/bootstrap', auth, wrap(async (req, res) => {
-  const [areas, users, tags, weeks, current] = await Promise.all([
+  const [areas, users, tags, weeks, rejectReasons, current] = await Promise.all([
     q(`select * from areas order by orden, id`),
     q(`select id,email,nombre,ini,area_id,rol,activo,presenta from users order by id`),
     q(`select * from tags order by name`),
     q(`select * from weeks order by fecha_inicio desc limit 12`),
+    q(`select * from reject_reasons order by orden, id`),
     getCurrentWeek(),
   ]);
-  res.json({ me: req.user, areas: areas.rows, users: users.rows, tags: tags.rows, weeks: weeks.rows, currentWeek: current });
+  res.json({ me: req.user, areas: areas.rows, users: users.rows, tags: tags.rows, weeks: weeks.rows, rejectReasons: rejectReasons.rows, currentWeek: current });
 }));
 
 app.get('/weeks/current', auth, wrap(async (req, res) => res.json(await getCurrentWeek())));
@@ -297,6 +298,23 @@ app.patch('/admin/tags/:id', auth, requireAdmin, wrap(async (req, res) => {
 }));
 app.delete('/admin/tags/:id', auth, requireAdmin, wrap(async (req, res) => {
   await q(`delete from tags where id=$1`, [req.params.id]);
+  res.json({ ok: true });
+}));
+
+// Motivos de rechazo (catálogo administrable).
+app.post('/admin/reject-reasons', auth, requireAdmin, wrap(async (req, res) => {
+  const texto = (req.body.texto || '').trim();
+  if (!texto) return res.status(400).json({ error: 'texto vacío' });
+  const { rows: mx } = await q(`select coalesce(max(orden),-1)+1 o from reject_reasons`);
+  const { rows } = await q(`insert into reject_reasons(texto,orden) values($1,$2) on conflict (lower(texto)) do update set texto=excluded.texto returning *`, [texto, mx[0].o]);
+  res.json(rows[0]);
+}));
+app.patch('/admin/reject-reasons/:id', auth, requireAdmin, wrap(async (req, res) => {
+  const { rows } = await q(`update reject_reasons set texto=coalesce($2,texto), orden=coalesce($3,orden) where id=$1 returning *`, [req.params.id, req.body.texto ?? null, req.body.orden ?? null]);
+  res.json(rows[0]);
+}));
+app.delete('/admin/reject-reasons/:id', auth, requireAdmin, wrap(async (req, res) => {
+  await q(`delete from reject_reasons where id=$1`, [req.params.id]);
   res.json({ ok: true });
 }));
 

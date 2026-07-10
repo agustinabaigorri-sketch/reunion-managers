@@ -2,7 +2,7 @@
 // Se activa con VITE_DEMO=1 (ver `npm run demo`). Los datos viven en localStorage.
 export const DEMO = String(import.meta.env.VITE_DEMO) === '1' || String(import.meta.env.VITE_DEMO) === 'true';
 
-const KEY = 'rm_demo_store_v7';
+const KEY = 'rm_demo_store_v8';
 const UKEY = 'rm_demo_uid';
 let _id = 5000;
 const iid = () => ++_id;
@@ -61,7 +61,13 @@ function seed() {
   set(12, 2, [mk('logro', 'Cierre de expediente regulatorio', ['#regulatorio'])]);
   // pablo (8) y flor (10) no cargan -> métrica "sin cargar"
 
-  return { areas, users, tags, weeks, entries };
+  const rejectReasons = [
+    { id: 8801, texto: 'Sin capacidad este trimestre', orden: 0 },
+    { id: 8802, texto: 'No corresponde a nuestra área', orden: 1 },
+    { id: 8803, texto: 'Falta información para arrancar', orden: 2 },
+    { id: 8804, texto: 'Es de menor prioridad por ahora', orden: 3 },
+  ];
+  return { areas, users, tags, weeks, entries, rejectReasons };
 }
 
 let store = load();
@@ -165,7 +171,7 @@ function okrTreeDemo(anio) {
 export const demoApi = {
   login: () => wait({ token: 'demo', user: me() }),
   changePassword: () => wait({ ok: true }),
-  bootstrap: () => wait({ me: me(), areas: store.areas, users: store.users, tags: store.tags, weeks: [...store.weeks].reverse(), currentWeek: weekById(CURRENT) }),
+  bootstrap: () => wait({ me: me(), areas: store.areas, users: store.users, tags: store.tags, weeks: [...store.weeks].reverse(), rejectReasons: store.rejectReasons || [], currentWeek: weekById(CURRENT) }),
   resolveWeek: ({ offset = 0, date } = {}) => {
     if (date) return wait(store.weeks.find((w) => date >= w.fecha_inicio && date <= w.fecha_fin) || weekById(CURRENT));
     const idx = store.weeks.findIndex((w) => w.id === CURRENT);
@@ -210,6 +216,9 @@ export const demoApi = {
   addTag: (d) => { let name = (d.name || '').trim(); if (!name.startsWith('#')) name = '#' + name; name = name.toLowerCase(); if (!store.tags.find((t) => t.name === name)) store.tags.push({ id: iid(), name, color: d.color || '#8a929c' }); persist(); return wait({ ok: true }); },
   updTag: (id, d) => { const t = store.tags.find((x) => x.id === Number(id)); if (t && d.color) t.color = d.color; persist(); return wait(t); },
   delTag: (id) => { store.tags = store.tags.filter((x) => x.id !== Number(id)); persist(); return wait({ ok: true }); },
+  addRejectReason: (d) => { store.rejectReasons = store.rejectReasons || []; const texto = (d.texto || '').trim(); if (texto && !store.rejectReasons.find((r) => r.texto.toLowerCase() === texto.toLowerCase())) store.rejectReasons.push({ id: iid(), texto, orden: store.rejectReasons.length }); persist(); return wait({ ok: true }); },
+  updRejectReason: (id, d) => { const r = (store.rejectReasons || []).find((x) => x.id === Number(id)); if (r) { if (d.texto != null) r.texto = d.texto; if (d.orden != null) r.orden = Number(d.orden); } persist(); return wait(r); },
+  delRejectReason: (id) => { store.rejectReasons = (store.rejectReasons || []).filter((x) => x.id !== Number(id)); persist(); return wait({ ok: true }); },
   okrGet: (anio) => { ensureOkr(); const a = Number(anio) || 2026; return wait({ anio: a, objectives: okrTreeDemo(a) }); },
   okrAddObjective: (d) => { ensureOkr(); store.okrObjectives.push({ id: iid(), anio: Number(d.anio) || 2026, titulo: d.titulo || 'Nuevo objetivo', prioridad: d.prioridad || 'media', orden: store.okrObjectives.length }); persist(); return wait({ ok: true }); },
   okrUpdObjective: (id, d) => { ensureOkr(); const o = store.okrObjectives.find((x) => x.id === Number(id)); if (o) { if (d.titulo != null) o.titulo = d.titulo; if (d.prioridad != null) o.prioridad = d.prioridad; } persist(); return wait(o); },
