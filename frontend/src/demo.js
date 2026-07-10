@@ -138,6 +138,15 @@ function ensureOkr() {
     { id: 9401, area_objective_id: 9201, area_id: 1, pedido: 'Definir el pricing y los packs para escuelas nuevas', estado: 'pendiente' },
     { id: 9402, area_objective_id: 9204, area_id: 3, pedido: 'Validar el flujo con Producto', estado: 'tomado' },
   ];
+  const u1 = store.users.find((u) => u.area_id === 1);
+  store.teamMembers = [
+    { id: 9501, area_id: 1, nombre: 'Sol P.', user_id: null },
+    ...(u1 ? [{ id: 9502, area_id: 1, nombre: u1.nombre, user_id: u1.id }] : []),
+  ];
+  store.workTasks = [
+    { id: 9601, area_id: 1, member_id: 9501, area_objective_id: 9204, texto: 'Armar la plantilla de cierre mensual', avance: 60, vence: null },
+    ...(u1 ? [{ id: 9602, area_id: 1, member_id: 9502, area_objective_id: null, texto: 'Revisar conciliaciones bancarias', avance: 30, vence: '2026-07-15' }] : []),
+  ];
   store.umbral = 70;
   persist();
 }
@@ -214,6 +223,15 @@ export const demoApi = {
   okrColabAdd: (d) => { ensureOkr(); store.okrColabs = store.okrColabs || []; const ex = store.okrColabs.find((c) => c.area_objective_id === Number(d.area_objective_id) && c.area_id === Number(d.area_id)); if (ex) { if (d.pedido != null) ex.pedido = d.pedido; } else store.okrColabs.push({ id: iid(), area_objective_id: Number(d.area_objective_id), area_id: Number(d.area_id), pedido: d.pedido || '', estado: 'pendiente' }); persist(); return wait({ ok: true }); },
   okrColabUpd: (id, d) => { ensureOkr(); const c = (store.okrColabs || []).find((x) => x.id === Number(id)); if (c) { if (d.pedido != null) c.pedido = d.pedido; if (d.estado != null) c.estado = d.estado; } persist(); return wait(c); },
   okrColabDel: (id) => { ensureOkr(); store.okrColabs = (store.okrColabs || []).filter((x) => x.id !== Number(id)); persist(); return wait({ ok: true }); },
+  teamGet: () => { ensureOkr(); const a = me().area_id; const members = (store.teamMembers || []).filter((m) => m.area_id === a).map((m) => { const u = store.users.find((x) => x.id === m.user_id); return { ...m, user_nombre: u?.nombre || null, user_email: u?.email || null }; }); const usuarios = store.users.filter((u) => u.activo && u.area_id === a).map((u) => ({ id: u.id, nombre: u.nombre, email: u.email })); return wait({ area_id: a, members, usuarios }); },
+  teamAdd: (d) => { ensureOkr(); store.teamMembers = store.teamMembers || []; const a = me().area_id; let nombre = (d.nombre || '').trim(); const uid = d.user_id ? Number(d.user_id) : null; if (uid && !nombre) nombre = (store.users.find((x) => x.id === uid) || {}).nombre || ''; store.teamMembers.push({ id: iid(), area_id: a, nombre, user_id: uid }); persist(); return wait({ ok: true }); },
+  teamUpd: (id, d) => { ensureOkr(); const m = (store.teamMembers || []).find((x) => x.id === Number(id)); if (m) { if (d.nombre != null) m.nombre = d.nombre; if ('user_id' in d) m.user_id = d.user_id ? Number(d.user_id) : null; } persist(); return wait(m); },
+  teamDel: (id) => { ensureOkr(); store.teamMembers = (store.teamMembers || []).filter((x) => x.id !== Number(id)); (store.workTasks || []).forEach((w) => { if (w.member_id === Number(id)) w.member_id = null; }); persist(); return wait({ ok: true }); },
+  workGet: () => { ensureOkr(); const a = me().area_id; return wait((store.workTasks || []).filter((w) => w.area_id === a).map((w) => ({ ...w, objetivo: (store.okrAOs.find((o) => o.id === w.area_objective_id) || {}).titulo }))); },
+  workMine: () => { ensureOkr(); const uid = me().id; const mem = (store.teamMembers || []).filter((m) => m.user_id === uid).map((m) => m.id); return wait((store.workTasks || []).filter((w) => mem.includes(w.member_id)).map((w) => ({ ...w, objetivo: (store.okrAOs.find((o) => o.id === w.area_objective_id) || {}).titulo, area_nombre: (store.areas.find((a) => a.id === w.area_id) || {}).nombre }))); },
+  workAdd: (d) => { ensureOkr(); store.workTasks = store.workTasks || []; const a = me().area_id; store.workTasks.push({ id: iid(), area_id: a, member_id: d.member_id ? Number(d.member_id) : null, area_objective_id: d.area_objective_id ? Number(d.area_objective_id) : null, texto: d.texto || '', avance: 0, vence: d.vence || null }); persist(); return wait({ ok: true }); },
+  workUpd: (id, d) => { ensureOkr(); const w = (store.workTasks || []).find((x) => x.id === Number(id)); if (w) { if (d.texto != null) w.texto = d.texto; if (d.avance != null) w.avance = Math.max(0, Math.min(100, +d.avance)); if ('member_id' in d) w.member_id = d.member_id ? Number(d.member_id) : null; if ('area_objective_id' in d) w.area_objective_id = d.area_objective_id ? Number(d.area_objective_id) : null; if ('vence' in d) w.vence = d.vence || null; } persist(); return wait(w); },
+  workDel: (id) => { ensureOkr(); store.workTasks = (store.workTasks || []).filter((x) => x.id !== Number(id)); persist(); return wait({ ok: true }); },
   okrMetaAdd: (d) => { ensureOkr(); store.okrMetas = store.okrMetas || []; store.okrMetas.push({ id: iid(), area_objective_id: Number(d.area_objective_id), titulo: d.titulo || '', hecho: false, avance: 0, orden: store.okrMetas.length }); persist(); return wait({ ok: true }); },
   okrMetaUpd: (id, d) => { ensureOkr(); const m = (store.okrMetas || []).find((x) => x.id === Number(id)); if (m) { if (d.titulo != null) m.titulo = d.titulo; if ('vence' in d) m.vence = d.vence || null; if (d.avance != null) { m.avance = Math.max(0, Math.min(100, +d.avance)); m.hecho = m.avance >= 100; } else if (d.hecho != null) { m.hecho = !!d.hecho; m.avance = m.hecho ? 100 : 0; } } persist(); return wait(m); },
   okrMetaDel: (id) => { ensureOkr(); store.okrMetas = (store.okrMetas || []).filter((x) => x.id !== Number(id)); persist(); return wait({ ok: true }); },

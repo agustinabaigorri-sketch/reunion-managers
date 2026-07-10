@@ -561,6 +561,106 @@ app.post('/tasks/:id/to-logro', auth, wrap(async (req, res) => {
   res.json({ ok: true, week });
 }));
 
+// ---------- Modo trabajo: equipo del área + tareas asignadas ----------
+// Miembros del equipo de mi área + usuarios del área disponibles para vincular.
+app.get('/team', auth, wrap(async (req, res) => {
+  const members = (await q(
+    `select t.id, t.nombre, t.user_id, u.nombre as user_nombre, u.email as user_email
+     from team_members t left join users u on u.id = t.user_id
+     where t.area_id = $1 order by t.id`, [req.user.area_id])).rows;
+  const usuarios = (await q('select id, nombre, email from users where area_id = $1 order by nombre', [req.user.area_id])).rows;
+  res.json({ area_id: req.user.area_id, members, usuarios });
+}));
+app.post('/team', auth, wrap(async (req, res) => {
+  const areaId = req.user.rol === 'admin' && req.body.area_id ? Number(req.body.area_id) : req.user.area_id;
+  if (!canAO(req.user, areaId)) return res.status(403).json({ error: 'solo tu área' });
+  const b = req.body;
+  let nombre = (b.nombre || '').trim();
+  const userId = b.user_id ? Number(b.user_id) : null;
+  if (userId && !nombre) { const { rows } = await q('select nombre from users where id=$1', [userId]); nombre = rows[0]?.nombre || ''; }
+  const { rows } = await q('insert into team_members(area_id,nombre,user_id) values($1,$2,$3) returning *', [areaId, nombre, userId]);
+  res.json(rows[0]);
+}));
+app.patch('/team/:id', auth, wrap(async (req, res) => {
+  const { rows: cur } = await q('select * from team_members where id=$1', [req.params.id]);
+  if (!cur[0]) return res.status(404).json({ error: 'no existe' });
+  if (!canAO(req.user, cur[0].area_id)) return res.status(403).json({ error: 'solo tu área' });
+  const b = req.body;
+  const hasU = Object.prototype.hasOwnProperty.call(b, 'user_id');
+  const { rows } = await q(
+    `update team_members set nombre=coalesce($2,nombre), user_id = case when $3 then $4 else user_id end where id=$1 returning *`,
+    [req.params.id, b.nombre ?? null, hasU, hasU ? (b.user_id ? Number(b.user_id) : null) : null]);
+  res.json(rows[0]);
+}));
+app.delete('/team/:id', auth, wrap(async (req, res) => {
+  const { rows: cur } = await q('select * from team_members where id=$1', [req.params.id]);
+  if (cur[0] && !canAO(req.user, cur[0].area_id)) return res.status(403).json({ error: 'solo tu área' });
+  await q('delete from team_members where id=$1', [req.params.id]);
+  res.json({ ok: true });
+}));
+
+// Tablero de trabajo de mi área (vista manager).
+app.get('/work', auth, wrap(async (req, res) => {
+  const { rows } = await q(
+    `select w.*, ao.titulo as objetivo from work_tasks w
+     left join okr_area_objectives ao on ao.id = w.area_objective_id
+     where w.area_id = $1 order by w.member_id nulls first, w.id`, [req.user.area_id]);
+  res.json(rows);
+}));
+// Tareas asignadas a mí (vista persona): las de un miembro vinculado a mi usuario.
+app.get('/work/mine', auth, wrap(async (req, res) => {
+  const { rows } = await q(
+    `select w.*, ao.titulo as objetivo, a.nombre as area_nombre from work_tasks w
+     join team_members t on t.id = w.member_id
+     left join okr_area_objectives ao on ao.id = w.area_objective_id
+     left join areas a on a.id = w.area_id
+     where t.user_id = $1 order by w.vence nulls last, w.id`, [req.user.id]);
+  res.json(rows);
+}));
+app.post('/work', auth, wrap(async (req, res) => {
+  const areaId = req.user.rol === 'admin' && req.body.area_id ? Number(req.body.area_id) : req.user.area_id;
+  if (!canAO(req.user, areaId)) return res.status(403).json({ error: 'solo tu área' });
+  const b = req.body;
+  const { rows } = await q(
+    'insert into work_tasks(area_id,member_id,area_objective_id,texto,vence,created_by) values($1,$2,$3,$4,$5,$6) returning *',
+    [areaId, b.member_id ? Number(b.member_id) : null, b.area_objective_id ? Number(b.area_objective_id) : null, b.texto || '', b.vence || null, req.user.id]);
+  res.json(rows[0]);
+}));
+app.patch('/work/:id', auth, wrap(async (req, res) => {
+  const { rows: cur } = await q('select w.*, t.user_id as member_user_id from work_tasks w left join team_members t on t.id=w.member_id where w.id=$1', [req.params.id]);
+  if (!cur[0]) return res.status(404).json({ error: 'no existe' });
+  const w = cur[0];
+  const b = req.body;
+  const esManager = canAO(req.user, w.area_id);
+  const esAsignado = w.member_user_id && w.member_user_id === req.user.id;
+  // El asignado solo puede tocar el avance; el manager, todo.
+  if (!esManager && !esAsignado) return res.status(403).json({ error: 'sin permiso' });
+  if (!esManager && (b.texto != null || b.member_id !== undefined || b.area_objective_id !== undefined || b.vence !== undefined)) {
+    return res.status(403).json({ error: 'solo podés marcar tu avance' });
+  }
+  const avance = b.avance != null ? Math.max(0, Math.min(100, Math.round(+b.avance))) : null;
+  const hasM = Object.prototype.hasOwnProperty.call(b, 'member_id');
+  const hasO = Object.prototype.hasOwnProperty.call(b, 'area_objective_id');
+  const hasV = Object.prototype.hasOwnProperty.call(b, 'vence');
+  const { rows } = await q(
+    `update work_tasks set texto=coalesce($2,texto), avance=coalesce($3,avance),
+       member_id = case when $4 then $5 else member_id end,
+       area_objective_id = case when $6 then $7 else area_objective_id end,
+       vence = case when $8 then $9::date else vence end
+     where id=$1 returning *`,
+    [req.params.id, b.texto ?? null, avance,
+     hasM, hasM ? (b.member_id ? Number(b.member_id) : null) : null,
+     hasO, hasO ? (b.area_objective_id ? Number(b.area_objective_id) : null) : null,
+     hasV, hasV ? (b.vence || null) : null]);
+  res.json(rows[0]);
+}));
+app.delete('/work/:id', auth, wrap(async (req, res) => {
+  const { rows: cur } = await q('select * from work_tasks where id=$1', [req.params.id]);
+  if (cur[0] && !canAO(req.user, cur[0].area_id)) return res.status(403).json({ error: 'solo tu área' });
+  await q('delete from work_tasks where id=$1', [req.params.id]);
+  res.json({ ok: true });
+}));
+
 app.get('/health', (req, res) => res.json({ ok: true }));
 
 // En producción, sirve el frontend ya compilado (mismo origen).
