@@ -61,7 +61,7 @@ export default function ModoTrabajo({ boot }) {
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, width: 120 }}>
                 <div className="bar-track"><div className="bar-fill" style={{ width: (t.avance || 0) + '%', background: (t.avance || 0) >= 100 ? '#2e9e5b' : color }} /></div>
-                <input type="number" min="0" max="100" defaultValue={t.avance || 0} key={t.avance} onBlur={(e) => { const v = Math.max(0, Math.min(100, +e.target.value)); if (v !== (t.avance || 0)) run(() => api.workUpd(t.id, { avance: v })); }} style={{ width: 44, padding: '3px 5px' }} />
+                <input type="number" min="0" max="100" defaultValue={t.avance || 0} key={t.avance} onBlur={(e) => { const v = Math.max(0, Math.min(100, +e.target.value)); if (v !== (t.avance || 0)) run(() => api.workUpd(t.id, { avance: v })); }} style={{ width: 56, padding: '3px 4px', fontSize: 12, textAlign: 'center' }} />
               </div>
             </div>
           ))}
@@ -115,7 +115,7 @@ export default function ModoTrabajo({ boot }) {
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6 }}>
                     <div className="bar-track"><div className="bar-fill" style={{ width: (t.avance || 0) + '%', background: (t.avance || 0) >= 100 ? '#2e9e5b' : color }} /></div>
-                    <input type="number" min="0" max="100" defaultValue={t.avance || 0} key={t.avance} onBlur={(e) => { const v = Math.max(0, Math.min(100, +e.target.value)); if (v !== (t.avance || 0)) run(() => api.workUpd(t.id, { avance: v })); }} style={{ width: 42, padding: '2px 4px' }} />
+                    <input type="number" min="0" max="100" defaultValue={t.avance || 0} key={t.avance} onBlur={(e) => { const v = Math.max(0, Math.min(100, +e.target.value)); if (v !== (t.avance || 0)) run(() => api.workUpd(t.id, { avance: v })); }} style={{ width: 54, padding: '2px 4px', fontSize: 12, textAlign: 'center' }} />
                     <button className="btn btn-sm btn-ghost" title="eliminar tarea" onClick={() => run(() => api.workDel(t.id))} style={{ padding: '0 5px' }}>×</button>
                   </div>
                 </div>

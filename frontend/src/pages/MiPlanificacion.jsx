@@ -128,7 +128,7 @@ export default function MiPlanificacion({ boot }) {
                     <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 9, margin: '5px 0', flexWrap: 'wrap' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6, width: 108 }} title="% de avance (100 = hecha)">
                         <div className="bar-track"><div className="bar-fill" style={{ width: (m.avance || 0) + '%', background: (m.avance || 0) >= 100 ? '#2e9e5b' : color }} /></div>
-                        <input type="number" min="0" max="100" defaultValue={m.avance || 0} key={m.avance} onBlur={(e) => { const v = Math.max(0, Math.min(100, +e.target.value)); if (v !== (m.avance || 0)) run(() => api.okrMetaUpd(m.id, { avance: v })); }} style={{ width: 44, padding: '3px 5px' }} />
+                        <input type="number" min="0" max="100" defaultValue={m.avance || 0} key={m.avance} onBlur={(e) => { const v = Math.max(0, Math.min(100, +e.target.value)); if (v !== (m.avance || 0)) run(() => api.okrMetaUpd(m.id, { avance: v })); }} style={{ width: 56, padding: '3px 4px', fontSize: 12, textAlign: 'center' }} />
                       </div>
                       <input type="text" defaultValue={m.titulo} placeholder="Meta…" onBlur={(e) => e.target.value !== m.titulo && run(() => api.okrMetaUpd(m.id, { titulo: e.target.value }))} style={{ flex: 1, minWidth: 140, padding: '4px 7px', textDecoration: (m.avance || 0) >= 100 ? 'line-through' : 'none', color: (m.avance || 0) >= 100 ? 'var(--hint)' : 'var(--text)' }} />
                       <input type="date" defaultValue={m.vence || ''} onChange={(e) => run(() => api.okrMetaUpd(m.id, { vence: e.target.value || null }))} style={{ padding: '4px 6px', fontSize: 12 }} title="fecha límite" />
