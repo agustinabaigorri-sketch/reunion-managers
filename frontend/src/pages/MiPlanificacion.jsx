@@ -3,6 +3,7 @@ import { api } from '../api';
 
 const QOPTS = [1, 2, 3, 4];
 const QLABEL = ['Ene–Mar', 'Abr–Jun', 'Jul–Sep', 'Oct–Dic'];
+const PRIO = { alta: ['#993c1d', '#FFEAE0'], media: ['#7a5a00', '#FFF3D6'], baja: ['#54606e', '#EEF1F4'] };
 const currentQ = () => Math.floor(new Date().getMonth() / 3) + 1;
 
 export default function MiPlanificacion({ boot }) {
@@ -57,7 +58,10 @@ export default function MiPlanificacion({ boot }) {
             {items.map((a) => (
               <div className="tcard" key={a.id} style={{ marginBottom: 10 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                  <input type="text" defaultValue={a.titulo} placeholder="Escribí tu objetivo…" onBlur={(e) => e.target.value !== a.titulo && run(() => api.okrUpdAO(a.id, { titulo: e.target.value }))} style={{ flex: 1, minWidth: 200, fontWeight: 500, fontSize: 15, padding: '6px 8px' }} />
+                  <select value={a.prioridad || 'media'} onChange={(e) => run(() => api.okrUpdAO(a.id, { prioridad: e.target.value }))} title="importancia" style={{ background: PRIO[a.prioridad || 'media'][1], color: PRIO[a.prioridad || 'media'][0], border: 'none', borderRadius: 7, padding: '4px 7px', fontSize: 11.5, fontWeight: 600 }}>
+                    <option value="alta">alta</option><option value="media">media</option><option value="baja">baja</option>
+                  </select>
+                  <input type="text" defaultValue={a.titulo} placeholder="Escribí tu objetivo…" onBlur={(e) => e.target.value !== a.titulo && run(() => api.okrUpdAO(a.id, { titulo: e.target.value }))} style={{ flex: 1, minWidth: 180, fontWeight: 500, fontSize: 15, padding: '6px 8px' }} />
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, width: 150 }}>
                     <div className="bar-track"><div className="bar-fill" style={{ width: aoPct(a) + '%', background: color }} /></div>
                     <b style={{ fontSize: 13, minWidth: 38, textAlign: 'right' }}>{aoPct(a)}%</b>
@@ -67,6 +71,8 @@ export default function MiPlanificacion({ boot }) {
                   </select>
                   <button className="btn btn-sm btn-ghost" onClick={() => confirm('¿Eliminar objetivo y sus metas?') && run(() => api.okrDelAO(a.id))} title="eliminar">×</button>
                 </div>
+
+                <input type="text" defaultValue={a.detalle || ''} placeholder="Detalle · ¿cómo se mide este objetivo?" onBlur={(e) => e.target.value !== (a.detalle || '') && run(() => api.okrUpdAO(a.id, { detalle: e.target.value }))} style={{ width: '100%', marginTop: 8, padding: '5px 8px', fontSize: 13, color: 'var(--muted)' }} />
 
                 {/* metas */}
                 <div style={{ marginTop: 10, marginLeft: 6, paddingLeft: 12, borderLeft: '2px solid var(--line)' }}>

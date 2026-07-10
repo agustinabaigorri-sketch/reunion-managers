@@ -103,27 +103,6 @@ export default function Semana({ boot, week, weekObj }) {
         </button>
       </div>
 
-      {dueMetas.length > 0 && (
-        <div className="hero" style={{ marginTop: 16 }}>
-          <div className="hero-top" style={{ alignItems: 'flex-start' }}>
-            <div style={{ flex: 1 }}>
-              <div className="hero-h">Para esta semana · de tus objetivos</div>
-              <div className="hero-sub">Metas con fecha para esta semana (o atrasadas). Tildá las que cierres.</div>
-            </div>
-          </div>
-          {dueMetas.map((m) => {
-            const overdue = weekObj && m.vence < weekObj.fecha_inicio;
-            return (
-              <div className="todo" key={m.id}>
-                <input type="checkbox" onChange={() => doneMeta(m.id)} title="marcar como hecha" />
-                <span className="txt">{m.titulo} <span className="muted">· {m.objetivo}</span></span>
-                <span className="chip" style={{ background: overdue ? 'var(--red-bg)' : 'var(--eb-green-bg)', color: overdue ? 'var(--red)' : 'var(--eb-green-d)' }}>{overdue ? '⚠ ' : ''}{fmtV(m.vence)}</span>
-              </div>
-            );
-          })}
-        </div>
-      )}
-
       <div className="cross" style={{ marginTop: 16 }}>
         <div className="xcard wait">
           <div className="xh"><span className="dot d-bloqueo" />Estás esperando a otras áreas</div>
@@ -174,6 +153,27 @@ export default function Semana({ boot, week, weekObj }) {
                   <button className={c.status === 'cancelado' ? 'on-can' : ''} onClick={() => set('cancelado')}>✕ Se cayó</button>
                 </span>
                 <button className={'seg-m st-' + c.status} onClick={() => setSheet(i)}>{SHEET_LABEL[c.status] || 'Marcar estado'} ▾</button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {dueMetas.length > 0 && (
+        <div className="hero" style={{ marginTop: 16 }}>
+          <div className="hero-top" style={{ alignItems: 'flex-start' }}>
+            <div style={{ flex: 1 }}>
+              <div className="hero-h">Para esta semana · de tus objetivos</div>
+              <div className="hero-sub">Metas con fecha para esta semana (o atrasadas). Tildá las que cierres.</div>
+            </div>
+          </div>
+          {dueMetas.map((m) => {
+            const overdue = weekObj && m.vence < weekObj.fecha_inicio;
+            return (
+              <div className="todo" key={m.id}>
+                <input type="checkbox" onChange={() => doneMeta(m.id)} title="marcar como hecha" />
+                <span className="txt">{m.titulo} <span className="muted">· {m.objetivo}</span></span>
+                <span className="chip" style={{ background: overdue ? 'var(--red-bg)' : 'var(--eb-green-bg)', color: overdue ? 'var(--red)' : 'var(--eb-green-d)' }}>{overdue ? '⚠ ' : ''}{fmtV(m.vence)}</span>
               </div>
             );
           })}

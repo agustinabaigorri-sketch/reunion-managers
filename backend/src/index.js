@@ -310,8 +310,8 @@ app.post('/okr/area-objectives', auth, wrap(async (req, res) => {
   const areaId = req.user.rol === 'admin' ? (b.area_id || null) : req.user.area_id;
   if (!canAO(req.user, areaId)) return res.status(403).json({ error: 'solo podés cargar objetivos de tu área' });
   const { rows } = await q(
-    'insert into okr_area_objectives(objective_id,area_id,anio,trimestre,titulo,meta) values($1,$2,$3,$4,$5,$6) returning *',
-    [b.objective_id || null, areaId, Number(b.anio) || new Date().getFullYear(), b.trimestre || 1, b.titulo || '', b.meta || 5]);
+    'insert into okr_area_objectives(objective_id,area_id,anio,trimestre,titulo,meta,prioridad) values($1,$2,$3,$4,$5,$6,$7) returning *',
+    [b.objective_id || null, areaId, Number(b.anio) || new Date().getFullYear(), b.trimestre || 1, b.titulo || '', b.meta || 5, b.prioridad || 'media']);
   res.json(rows[0]);
 }));
 app.patch('/okr/area-objectives/:id', auth, wrap(async (req, res) => {
@@ -324,9 +324,10 @@ app.patch('/okr/area-objectives/:id', auth, wrap(async (req, res) => {
   const { rows } = await q(
     `update okr_area_objectives set titulo=coalesce($2,titulo), objective_id=coalesce($3,objective_id),
        trimestre=coalesce($4,trimestre), meta=coalesce($5,meta), area_id=coalesce($6,area_id),
-       colab_areas = case when $7 then $8::int[] else colab_areas end
+       colab_areas = case when $7 then $8::int[] else colab_areas end,
+       prioridad=coalesce($9,prioridad), detalle=coalesce($10,detalle)
      where id=$1 returning *`,
-    [req.params.id, b.titulo ?? null, b.objective_id ?? null, b.trimestre ?? null, b.meta ?? null, area, hasC, hasC ? b.colab_areas : null]);
+    [req.params.id, b.titulo ?? null, b.objective_id ?? null, b.trimestre ?? null, b.meta ?? null, area, hasC, hasC ? b.colab_areas : null, b.prioridad ?? null, b.detalle ?? null]);
   res.json(rows[0]);
 }));
 app.delete('/okr/area-objectives/:id', auth, wrap(async (req, res) => {
