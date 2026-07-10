@@ -11,10 +11,13 @@ export default function MisTareas() {
   const [busy, setBusy] = useState(false);
   const [nt, setNt] = useState({ titulo: '', prioridad: 'media' });
   const [openId, setOpenId] = useState(null);
+  const [sel, setSel] = useState([]);
 
   const load = () => api.tasksGet().then(setTasks);
   useEffect(() => { load(); }, []);
   const run = async (fn) => { setBusy(true); try { await fn(); await load(); } catch (e) { alert(e.message); } finally { setBusy(false); } };
+  const toggleSel = (id) => setSel((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]));
+  const bulkMove = async (toWeek) => { const ids = sel; await run(async () => { for (const id of ids) await api.taskUpd(id, { en_semana: toWeek }); }); setSel([]); };
 
   if (!tasks) return <div style={{ color: 'var(--muted)' }}>Cargando…</div>;
 
@@ -55,8 +58,12 @@ export default function MisTareas() {
     return (
       <React.Fragment>
         <div className="task-row">
-          <input type="checkbox" checked={t.estado === 'hecho'} onChange={(e) => run(() => api.taskUpd(t.id, { estado: e.target.checked ? 'hecho' : 'pendiente' }))} />
-          <span style={{ flex: 1, minWidth: 150, textDecoration: t.estado === 'hecho' ? 'line-through' : 'none', color: t.estado === 'hecho' ? 'var(--hint)' : 'var(--text)' }}>{t.titulo}</span>
+          <input type="checkbox" checked={sel.includes(t.id)} onChange={() => toggleSel(t.id)} title="seleccionar para mover" />
+          <span style={{ flex: 1, minWidth: 130, textDecoration: t.estado === 'hecho' ? 'line-through' : 'none', color: t.estado === 'hecho' ? 'var(--hint)' : 'var(--text)' }}>{t.titulo}</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, width: 118 }} title="% de avance (100 = cumplida)">
+            <div className="bar-track"><div className="bar-fill" style={{ width: (t.avance || 0) + '%', background: (t.avance || 0) >= 100 ? '#2e9e5b' : 'var(--eb-green)' }} /></div>
+            <input type="number" min="0" max="100" defaultValue={t.avance || 0} key={t.avance} onBlur={(e) => { const v = Math.max(0, Math.min(100, +e.target.value)); if (v !== (t.avance || 0)) run(() => api.taskUpd(t.id, { avance: v })); }} style={{ width: 46, padding: '3px 5px' }} />
+          </div>
           {t.nota ? <span title={t.nota} style={{ fontSize: 13, cursor: 'help' }}>📝</span> : null}
           {vi && <span className="chip" style={{ background: vi.bg, color: vi.color }}>{vi.label}</span>}
           {t.estado === 'pendiente' && <AgeEl c={t.created_at} />}
@@ -98,6 +105,15 @@ export default function MisTareas() {
         </select>
         <button className="btn btn-primary" onClick={add}>+ agregar</button>
       </div>
+
+      {sel.length > 0 && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '8px 0', padding: '8px 12px', background: 'var(--eb-green-bg)', borderRadius: 8, flexWrap: 'wrap' }}>
+          <b className="small" style={{ color: 'var(--eb-green-d)' }}>{sel.length} seleccionada{sel.length > 1 ? 's' : ''}</b>
+          <button className="btn btn-sm" onClick={() => bulkMove(true)}>→ esta semana</button>
+          <button className="btn btn-sm" onClick={() => bulkMove(false)}>→ backlog</button>
+          <button className="btn btn-sm btn-ghost" onClick={() => setSel([])}>limpiar</button>
+        </div>
+      )}
 
       <div className="area-h" style={{ marginTop: 18 }}><span className="dot" style={{ background: 'var(--eb-green)' }} />Esta semana · tu foco<span className="ln" /></div>
       {semana.length === 0 && <div className="empty">Sin tareas para esta semana. Mandá algo desde el backlog ↓</div>}

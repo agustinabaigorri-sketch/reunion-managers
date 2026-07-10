@@ -6,6 +6,22 @@ const QLABEL = ['Ene–Mar', 'Abr–Jun', 'Jul–Sep', 'Oct–Dic'];
 const PRIO = { alta: ['#993c1d', '#FFEAE0'], media: ['#7a5a00', '#FFF3D6'], baja: ['#54606e', '#EEF1F4'] };
 const currentQ = () => Math.floor(new Date().getMonth() / 3) + 1;
 
+// Checklist heurístico (sin IA) para ver si el objetivo está bien planteado.
+const OPVERBS = ['llamar', 'enviar', 'mandar', 'revisar', 'hacer', 'armar', 'pedir', 'comprar', 'agendar', 'coordinar', 'preparar', 'escribir', 'actualizar'];
+function calidad(a) {
+  const metas = a.metas || [];
+  const first = (a.titulo || '').trim().toLowerCase().split(/\s+/)[0];
+  const checks = [
+    metas.length >= 3,
+    metas.some((m) => m.vence),
+    metas.some((m) => /\d/.test(m.titulo)),
+    (a.titulo || '').trim().length >= 15 && !OPVERBS.includes(first),
+  ];
+  const txt = ['al menos 3 metas', 'alguna meta con fecha', 'una meta medible (con número)', 'redactarlo como objetivo (no tarea)'];
+  const n = checks.filter(Boolean).length;
+  return { color: n === 4 ? '#2e9e5b' : n >= 2 ? '#B5780B' : '#C0392B', label: n === 4 ? 'Bien planteado' : n >= 2 ? 'Casi' : 'Revisá', falta: txt.filter((_, i) => !checks[i]) };
+}
+
 export default function MiPlanificacion({ boot }) {
   const [data, setData] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -72,7 +88,13 @@ export default function MiPlanificacion({ boot }) {
                   <button className="btn btn-sm btn-ghost" onClick={() => confirm('¿Eliminar objetivo y sus metas?') && run(() => api.okrDelAO(a.id))} title="eliminar">×</button>
                 </div>
 
-                <input type="text" defaultValue={a.detalle || ''} placeholder="Detalle · ¿cómo se mide este objetivo?" onBlur={(e) => e.target.value !== (a.detalle || '') && run(() => api.okrUpdAO(a.id, { detalle: e.target.value }))} style={{ width: '100%', marginTop: 8, padding: '5px 8px', fontSize: 13, color: 'var(--muted)' }} />
+                {(() => { const q = calidad(a); return (
+                  <div style={{ marginTop: 7, fontSize: 12, display: 'flex', alignItems: 'center', gap: 6, color: q.color, flexWrap: 'wrap' }}>
+                    <span style={{ width: 9, height: 9, borderRadius: '50%', background: q.color }} />
+                    <b>{q.label}</b>
+                    {q.falta.length > 0 && <span className="muted" style={{ fontWeight: 400 }}>· sumá: {q.falta.join(', ')}</span>}
+                  </div>
+                ); })()}
 
                 {/* metas */}
                 <div style={{ marginTop: 10, marginLeft: 6, paddingLeft: 12, borderLeft: '2px solid var(--line)' }}>

@@ -446,15 +446,18 @@ app.patch('/tasks/:id', auth, wrap(async (req, res) => {
   const b = req.body;
   const hasV = Object.prototype.hasOwnProperty.call(b, 'vence');
   const hasN = Object.prototype.hasOwnProperty.call(b, 'nota');
+  const hasAv = b.avance != null;
+  const avance = hasAv ? Math.max(0, Math.min(100, Math.round(+b.avance))) : null;
+  const estado = hasAv ? (avance >= 100 ? 'hecho' : 'pendiente') : (b.estado ?? null);
   const { rows } = await q(
     `update tasks set titulo=coalesce($3,titulo), prioridad=coalesce($4,prioridad),
-       estado=coalesce($5,estado), en_semana=coalesce($6,en_semana),
+       estado=coalesce($5,estado), en_semana=coalesce($6,en_semana), avance=coalesce($11,avance),
        vence = case when $7 then $8::date else vence end,
        nota  = case when $9 then $10 else nota end,
        completed_at = case when $5='hecho' then now() when $5='pendiente' then null else completed_at end
      where id=$1 and user_id=$2 returning *`,
-    [req.params.id, req.user.id, b.titulo ?? null, b.prioridad ?? null, b.estado ?? null, b.en_semana ?? null,
-      hasV, b.vence || null, hasN, hasN ? (b.nota ?? '') : null]);
+    [req.params.id, req.user.id, b.titulo ?? null, b.prioridad ?? null, estado, b.en_semana ?? null,
+      hasV, b.vence || null, hasN, hasN ? (b.nota ?? '') : null, avance]);
   res.json(rows[0]);
 }));
 app.delete('/tasks/:id', auth, wrap(async (req, res) => {
