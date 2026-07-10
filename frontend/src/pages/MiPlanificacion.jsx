@@ -44,6 +44,9 @@ export default function MiPlanificacion({ boot }) {
   if (!data) return <div style={{ color: 'var(--muted)' }}>Cargando…</div>;
   const anio = data.anio;
   const aoPct = (a) => { const m = a.metas || []; return m.length ? Math.round(m.reduce((s, x) => s + (x.avance || 0), 0) / m.length) : 0; };
+  const PRANK = { alta: 0, media: 1, baja: 2 };
+  const moveMeta = (a, idx, dir) => { const ids = (a.metas || []).map((m) => m.id); const j = idx + dir; if (j < 0 || j >= ids.length) return; [ids[idx], ids[j]] = [ids[j], ids[idx]]; run(() => api.okrMetaReorder(a.id, ids)); };
+  const sortMetasByDate = (a) => { const ids = [...(a.metas || [])].sort((x, y) => (x.vence || '9999-99-99').localeCompare(y.vence || '9999-99-99')).map((m) => m.id); run(() => api.okrMetaReorder(a.id, ids)); };
 
   return (
     <div style={{ opacity: busy ? 0.6 : 1 }}>
@@ -84,7 +87,7 @@ export default function MiPlanificacion({ boot }) {
       )}
 
       {QOPTS.map((q) => {
-        const items = data.objectives.filter((a) => a.trimestre === q);
+        const items = data.objectives.filter((a) => a.trimestre === q).sort((a, b) => PRANK[a.prioridad || 'media'] - PRANK[b.prioridad || 'media']);
         return (
           <div key={q} style={{ marginTop: 16 }}>
             <div className="area-h" style={{ margin: '0 0 8px' }}>
@@ -124,8 +127,12 @@ export default function MiPlanificacion({ boot }) {
                 <div style={{ marginTop: 10, marginLeft: 6, paddingLeft: 12, borderLeft: '2px solid var(--line)' }}>
                   <div className="muted small" style={{ marginBottom: 4 }}>Metas ({(a.metas || []).filter((m) => (m.avance || 0) >= 100).length}/{(a.metas || []).length} hechas):</div>
                   {(a.metas || []).length > 0 && <div style={{ fontSize: 10, color: 'var(--hint)', width: 108, marginBottom: 1 }}>% cumplimiento</div>}
-                  {(a.metas || []).map((m) => (
+                  {(a.metas || []).map((m, mi) => (
                     <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 9, margin: '5px 0', flexWrap: 'wrap' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 0.8 }} title="cambiar el orden">
+                        <button className="btn btn-sm btn-ghost" onClick={() => moveMeta(a, mi, -1)} disabled={mi === 0} style={{ padding: '0 4px', fontSize: 10, opacity: mi === 0 ? 0.3 : 1 }}>▲</button>
+                        <button className="btn btn-sm btn-ghost" onClick={() => moveMeta(a, mi, 1)} disabled={mi === (a.metas.length - 1)} style={{ padding: '0 4px', fontSize: 10, opacity: mi === (a.metas.length - 1) ? 0.3 : 1 }}>▼</button>
+                      </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6, width: 108 }} title="% de avance (100 = hecha)">
                         <div className="bar-track"><div className="bar-fill" style={{ width: (m.avance || 0) + '%', background: (m.avance || 0) >= 100 ? '#2e9e5b' : color }} /></div>
                         <input type="number" min="0" max="100" defaultValue={m.avance || 0} key={m.avance} onBlur={(e) => { const v = Math.max(0, Math.min(100, +e.target.value)); if (v !== (m.avance || 0)) run(() => api.okrMetaUpd(m.id, { avance: v })); }} style={{ width: 56, padding: '3px 4px', fontSize: 12, textAlign: 'center' }} />
@@ -135,7 +142,10 @@ export default function MiPlanificacion({ boot }) {
                       <button className="btn btn-sm btn-ghost" onClick={() => run(() => api.okrMetaDel(m.id))} title="eliminar">×</button>
                     </div>
                   ))}
-                  <button className="btn btn-sm btn-ghost" style={{ marginTop: 2 }} onClick={() => run(() => api.okrMetaAdd({ area_objective_id: a.id, titulo: '' }))}>+ meta</button>
+                  <div style={{ display: 'flex', gap: 6, marginTop: 2, flexWrap: 'wrap' }}>
+                    <button className="btn btn-sm btn-ghost" onClick={() => run(() => api.okrMetaAdd({ area_objective_id: a.id, titulo: '' }))}>+ meta</button>
+                    {(a.metas || []).length > 1 && <button className="btn btn-sm btn-ghost" onClick={() => sortMetasByDate(a)} title="ordenar las metas por fecha límite">↕ ordenar por fecha</button>}
+                  </div>
                 </div>
 
                 {/* otras áreas involucradas: por cada una, qué necesito */}

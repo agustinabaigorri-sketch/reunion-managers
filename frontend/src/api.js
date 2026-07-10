@@ -73,6 +73,7 @@ const realApi = {
   okrMetaAdd: (d) => req('POST', '/okr/metas', d),
   okrMetaUpd: (id, d) => req('PATCH', '/okr/metas/' + id, d),
   okrMetaDel: (id) => req('DELETE', '/okr/metas/' + id),
+  okrMetaReorder: (area_objective_id, ids) => req('POST', '/okr/metas/reorder', { area_objective_id, ids }),
   okrSettings: () => req('GET', '/okr/settings'),
   okrSetUmbral: (umbral) => req('PATCH', '/okr/settings', { umbral }),
   okrReport: (anio) => req('GET', '/okr/report' + (anio ? '?anio=' + anio : '')),

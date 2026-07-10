@@ -86,7 +86,8 @@ export default function Semana({ boot, week, weekObj }) {
 
   const MESV = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
   const fmtV = (d) => { const [, mo, day] = d.split('-'); return `${+day} ${MESV[+mo - 1]}`; };
-  const dueMetas = metas.filter((m) => !weekObj || (m.vence && m.vence <= weekObj.fecha_fin));
+  const horizon = weekObj ? (() => { const d = new Date(weekObj.fecha_fin + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + 28); return d.toISOString().slice(0, 10); })() : null;
+  const dueMetas = metas.filter((m) => m.vence && (!horizon || m.vence <= horizon));
   const doneMeta = (id) => api.okrMetaUpd(id, { hecho: true }).then(() => api.okrMyMetas().then(setMetas)).catch(() => {});
   const moveItem = async (it, dir) => {
     if (!weekObj) return;
@@ -173,17 +174,20 @@ export default function Semana({ boot, week, weekObj }) {
         <div className="hero" style={{ marginTop: 16 }}>
           <div className="hero-top" style={{ alignItems: 'flex-start' }}>
             <div style={{ flex: 1 }}>
-              <div className="hero-h">Para esta semana · de tus objetivos</div>
-              <div className="hero-sub">Metas con fecha para esta semana (o atrasadas). Tildá las que cierres.</div>
+              <div className="hero-h">Esta semana y las próximas · de tus objetivos</div>
+              <div className="hero-sub">Metas con fecha para esta semana (o atrasadas) y las próximas 4 semanas. Tildá las que cierres.</div>
             </div>
           </div>
           {dueMetas.map((m) => {
             const overdue = weekObj && m.vence < weekObj.fecha_inicio;
+            const upcoming = weekObj && m.vence > weekObj.fecha_fin;
+            const chipBg = overdue ? 'var(--red-bg)' : upcoming ? 'var(--surface-2, #eef1f4)' : 'var(--eb-green-bg)';
+            const chipFg = overdue ? 'var(--red)' : upcoming ? 'var(--muted)' : 'var(--eb-green-d)';
             return (
-              <div className="todo" key={m.id}>
+              <div className="todo" key={m.id} style={{ opacity: upcoming ? 0.72 : 1 }}>
                 <input type="checkbox" onChange={() => doneMeta(m.id)} title="marcar como hecha" />
                 <span className="txt">{m.titulo} <span className="muted">· {m.objetivo}</span></span>
-                <span className="chip" style={{ background: overdue ? 'var(--red-bg)' : 'var(--eb-green-bg)', color: overdue ? 'var(--red)' : 'var(--eb-green-d)' }}>{overdue ? '⚠ ' : ''}{fmtV(m.vence)}</span>
+                <span className="chip" style={{ background: chipBg, color: chipFg }}>{overdue ? '⚠ ' : upcoming ? '· ' : ''}{fmtV(m.vence)}</span>
               </div>
             );
           })}

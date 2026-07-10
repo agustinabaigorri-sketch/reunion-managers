@@ -472,6 +472,17 @@ app.delete('/okr/metas/:id', auth, wrap(async (req, res) => {
   await q('delete from okr_metas where id=$1', [req.params.id]);
   res.json({ ok: true });
 }));
+// Reordenar las metas de un objetivo (mano a mano o por fecha, según el orden de ids que llega).
+app.post('/okr/metas/reorder', auth, wrap(async (req, res) => {
+  const { area_objective_id, ids } = req.body;
+  const { rows: aoR } = await q('select * from okr_area_objectives where id=$1', [area_objective_id]);
+  if (!aoR[0]) return res.status(404).json({ error: 'objetivo no existe' });
+  if (!canAO(req.user, aoR[0].area_id)) return res.status(403).json({ error: 'solo tu área' });
+  for (let i = 0; i < (ids || []).length; i++) {
+    await q('update okr_metas set orden=$1 where id=$2 and area_objective_id=$3', [i, ids[i], area_objective_id]);
+  }
+  res.json({ ok: true });
+}));
 
 // --- umbral (setting) ---
 app.get('/okr/settings', auth, wrap(async (req, res) => {
