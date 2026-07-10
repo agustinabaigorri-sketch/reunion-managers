@@ -74,7 +74,8 @@ export default function MiPlanificacion({ boot }) {
                   {(a.metas || []).map((m) => (
                     <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 9, margin: '5px 0' }}>
                       <input type="checkbox" checked={m.hecho} onChange={(e) => run(() => api.okrMetaUpd(m.id, { hecho: e.target.checked }))} />
-                      <input type="text" defaultValue={m.titulo} placeholder="Meta…" onBlur={(e) => e.target.value !== m.titulo && run(() => api.okrMetaUpd(m.id, { titulo: e.target.value }))} style={{ flex: 1, minWidth: 160, padding: '4px 7px', textDecoration: m.hecho ? 'line-through' : 'none', color: m.hecho ? 'var(--hint)' : 'var(--text)' }} />
+                      <input type="text" defaultValue={m.titulo} placeholder="Meta…" onBlur={(e) => e.target.value !== m.titulo && run(() => api.okrMetaUpd(m.id, { titulo: e.target.value }))} style={{ flex: 1, minWidth: 140, padding: '4px 7px', textDecoration: m.hecho ? 'line-through' : 'none', color: m.hecho ? 'var(--hint)' : 'var(--text)' }} />
+                      <input type="date" defaultValue={m.vence || ''} onChange={(e) => run(() => api.okrMetaUpd(m.id, { vence: e.target.value || null }))} style={{ padding: '4px 6px', fontSize: 12 }} title="fecha límite" />
                       <button className="btn btn-sm btn-ghost" onClick={() => run(() => api.okrMetaDel(m.id))} title="eliminar">×</button>
                     </div>
                   ))}

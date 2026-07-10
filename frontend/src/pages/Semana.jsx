@@ -14,13 +14,14 @@ const SHEET_OPTS = [
   ['pendiente', '○ Sin marcar', 'var(--line-2)'],
 ];
 
-export default function Semana({ boot, week }) {
+export default function Semana({ boot, week, weekObj }) {
   const L = lookups(boot);
   const [entry, setEntry] = useState(null);
   const [saved, setSaved] = useState('se autoguarda');
   const [waitMe, setWaitMe] = useState([]);
   const [sheet, setSheet] = useState(null);
   const [objs, setObjs] = useState([]);
+  const [metas, setMetas] = useState([]);
   const dirty = useRef(false);
   const canLink = objs.length > 0;
 
@@ -45,6 +46,7 @@ export default function Semana({ boot, week }) {
 
   useEffect(() => {
     api.okrMine().then(setObjs).catch(() => {});
+    api.okrMyMetas().then(setMetas).catch(() => {});
   }, []);
 
   if (!entry) return <div style={{ color: 'var(--muted)' }}>Cargando…</div>;
@@ -82,6 +84,11 @@ export default function Semana({ boot, week }) {
   const resC = carry.filter((c) => c.status === 'resuelto').length;
   const pct = totC ? Math.round((resC / totC) * 100) : 0;
 
+  const MESV = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+  const fmtV = (d) => { const [, mo, day] = d.split('-'); return `${+day} ${MESV[+mo - 1]}`; };
+  const dueMetas = metas.filter((m) => !weekObj || (m.vence && m.vence <= weekObj.fecha_fin));
+  const doneMeta = (id) => api.okrMetaUpd(id, { hecho: true }).then(() => api.okrMyMetas().then(setMetas)).catch(() => {});
+
   return (
     <div>
       <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
@@ -95,6 +102,27 @@ export default function Semana({ boot, week }) {
           {entry.submitted ? '✓ enviado · seguir editando' : 'Enviar mi semana'}
         </button>
       </div>
+
+      {dueMetas.length > 0 && (
+        <div className="hero" style={{ marginTop: 16 }}>
+          <div className="hero-top" style={{ alignItems: 'flex-start' }}>
+            <div style={{ flex: 1 }}>
+              <div className="hero-h">Para esta semana · de tus objetivos</div>
+              <div className="hero-sub">Metas con fecha para esta semana (o atrasadas). Tildá las que cierres.</div>
+            </div>
+          </div>
+          {dueMetas.map((m) => {
+            const overdue = weekObj && m.vence < weekObj.fecha_inicio;
+            return (
+              <div className="todo" key={m.id}>
+                <input type="checkbox" onChange={() => doneMeta(m.id)} title="marcar como hecha" />
+                <span className="txt">{m.titulo} <span className="muted">· {m.objetivo}</span></span>
+                <span className="chip" style={{ background: overdue ? 'var(--red-bg)' : 'var(--eb-green-bg)', color: overdue ? 'var(--red)' : 'var(--eb-green-d)' }}>{overdue ? '⚠ ' : ''}{fmtV(m.vence)}</span>
+              </div>
+            );
+          })}
+        </div>
+      )}
 
       <div className="cross" style={{ marginTop: 16 }}>
         <div className="xcard wait">

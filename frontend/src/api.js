@@ -55,6 +55,7 @@ const realApi = {
   okrDelAO: (id) => req('DELETE', '/okr/area-objectives/' + id),
   okrMine: () => req('GET', '/okr/area-objectives/mine'),
   okrMyPlan: (anio) => req('GET', '/okr/my-plan' + (anio ? '?anio=' + anio : '')),
+  okrMyMetas: () => req('GET', '/okr/my-metas'),
   okrMetaAdd: (d) => req('POST', '/okr/metas', d),
   okrMetaUpd: (id, d) => req('PATCH', '/okr/metas/' + id, d),
   okrMetaDel: (id) => req('DELETE', '/okr/metas/' + id),

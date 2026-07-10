@@ -370,8 +370,23 @@ app.patch('/okr/metas/:id', auth, wrap(async (req, res) => {
   if (!ao) return res.status(404).json({ error: 'no existe' });
   if (!canAO(req.user, ao.area_id)) return res.status(403).json({ error: 'solo tu área' });
   const b = req.body;
-  const { rows } = await q('update okr_metas set titulo=coalesce($2,titulo), hecho=coalesce($3,hecho) where id=$1 returning *', [req.params.id, b.titulo ?? null, b.hecho ?? null]);
+  const hasV = Object.prototype.hasOwnProperty.call(b, 'vence');
+  const { rows } = await q(
+    `update okr_metas set titulo=coalesce($2,titulo), hecho=coalesce($3,hecho),
+       vence = case when $4 then $5::date else vence end where id=$1 returning *`,
+    [req.params.id, b.titulo ?? null, b.hecho ?? null, hasV, hasV ? (b.vence || null) : null]);
   res.json(rows[0]);
+}));
+
+// Sub-metas de mi área con fecha (pendientes) — para el panel semanal.
+app.get('/okr/my-metas', auth, wrap(async (req, res) => {
+  const { rows } = await q(
+    `select m.id, m.titulo, m.vence, m.hecho, ao.titulo as objetivo, ao.trimestre
+     from okr_metas m join okr_area_objectives ao on ao.id = m.area_objective_id
+     where ao.area_id = $1 and m.vence is not null and m.hecho = false
+     order by m.vence`,
+    [req.user.area_id]);
+  res.json(rows);
 }));
 app.delete('/okr/metas/:id', auth, wrap(async (req, res) => {
   const ao = await aoOfMeta(req.params.id);

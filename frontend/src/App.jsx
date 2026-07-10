@@ -90,7 +90,7 @@ export default function App() {
         </div>
       </header>
       <main>
-        {view === 'carga' && <Semana boot={boot} week={selected.id} />}
+        {view === 'carga' && <Semana boot={boot} week={selected.id} weekObj={selected} />}
         {view === 'reunion' && <Reunion boot={boot} week={selected.id} />}
         {view === 'metricas' && <Metricas boot={boot} week={selected.id} />}
         {view === 'tareas' && isAdmin && <MisTareas />}
