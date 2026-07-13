@@ -58,7 +58,7 @@ async function buildCarryFromPrev(userId, week) {
   const prevCarry = await loadCarry(pe[0].id);
   const fromCarry = prevCarry
     .filter((c) => c.status === 'sigue')
-    .map((c) => ({ srcTipo: c.srcTipo, texto: c.texto, status: 'pendiente', necesitaDe: c.necesitaDe, fromItemId: c.fromItemId }));
+    .map((c) => ({ srcTipo: c.srcTipo, texto: c.texto, status: 'sigue', necesitaDe: c.necesitaDe, fromItemId: c.fromItemId }));
   const out = [];
   const seen = new Set();
   for (const c of [...fromItems, ...fromCarry]) {
@@ -70,22 +70,47 @@ async function buildCarryFromPrev(userId, week) {
   return out;
 }
 
-async function getEntryData(userId, week) {
+const carryKey = (c) => (c.fromItemId != null ? 'i' + c.fromItemId : 't' + (c.texto || ''));
+const enCursoFromCarry = (texto) => ({ tipo: 'en_curso', texto, estado: 'na', necesitaDe: null, tags: [], areaObjectiveId: null });
+// persist=true (dueño abre su semana): materializa carry+"en curso". persist=false (tablero): solo lectura.
+async function getEntryData(userId, week, { persist = true } = {}) {
   const { rows } = await q(`select * from entries where user_id=$1 and week_id=$2`, [userId, week.id]);
-  const entry = rows[0];
-  if (!entry) return { submitted: false, items: [], carry: await buildCarryFromPrev(userId, week) };
-  let carry = await loadCarry(entry.id);
-  if (!carry.length) {
-    const built = await buildCarryFromPrev(userId, week);
-    for (const c of built) {
-      await q(
-        `insert into carry(entry_id,src_tipo,texto,status,necesita_de_area_id,from_item_id) values($1,$2,$3,$4,$5,$6)`,
-        [entry.id, c.srcTipo, c.texto, c.status, c.necesitaDe || null, c.fromItemId || null]
-      );
+  let entry = rows[0];
+  const expected = await buildCarryFromPrev(userId, week);
+  if (!entry) {
+    if (!expected.length) return { submitted: false, items: [], carry: [] };
+    if (!persist) {
+      const items = expected.filter((c) => c.status === 'sigue' && c.texto).map((c) => enCursoFromCarry(c.texto));
+      return { submitted: false, items, carry: expected };
     }
-    carry = built;
+    const ins = await q(`insert into entries(user_id,week_id,submitted,updated_at) values($1,$2,false,now()) returning *`, [userId, week.id]);
+    entry = ins.rows[0];
   }
-  return { id: entry.id, submitted: entry.submitted, items: await loadItems(entry.id), carry };
+  let carry = await loadCarry(entry.id);
+  // Merge: sumamos los arrastrados que falten (por clave), en cada carga (no solo cuando está vacía).
+  const have = new Set(carry.map(carryKey));
+  const missing = expected.filter((c) => !have.has(carryKey(c)));
+  if (persist) {
+    for (const c of missing) {
+      await q(`insert into carry(entry_id,src_tipo,texto,status,necesita_de_area_id,from_item_id) values($1,$2,$3,$4,$5,$6)`,
+        [entry.id, c.srcTipo, c.texto, c.status, c.necesitaDe || null, c.fromItemId || null]);
+    }
+  }
+  carry = [...carry, ...missing];
+  // Cada carry en "sigue" garantiza un ítem "En curso" en la semana (idempotente por texto).
+  let items = await loadItems(entry.id);
+  for (const c of carry) {
+    if (c.status !== 'sigue' || !c.texto) continue;
+    if (items.some((it) => it.tipo === 'en_curso' && it.texto === c.texto)) continue;
+    if (persist) {
+      const { rows: mx } = await q(`select coalesce(max(orden),-1)+1 o from items where entry_id=$1`, [entry.id]);
+      await q(`insert into items(entry_id,tipo,texto,estado,orden) values($1,'en_curso',$2,'na',$3)`, [entry.id, c.texto, mx[0].o]);
+      items = await loadItems(entry.id);
+    } else {
+      items = [...items, enCursoFromCarry(c.texto)];
+    }
+  }
+  return { id: entry.id, submitted: entry.submitted, items, carry };
 }
 
 async function saveEntry(userId, weekId, body) {
@@ -231,7 +256,7 @@ app.get('/board', auth, wrap(async (req, res) => {
   const { rows: users } = await q(`select id,nombre,ini,area_id,presenta from users where activo=true order by id`);
   const out = [];
   for (const u of users) {
-    const d = await getEntryData(u.id, week);
+    const d = await getEntryData(u.id, week, { persist: false });
     out.push({ user_id: u.id, nombre: u.nombre, ini: u.ini, area_id: u.area_id, presenta: u.presenta, ...d });
   }
   res.json({ week, board: out });

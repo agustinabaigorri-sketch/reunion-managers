@@ -73,17 +73,16 @@ export default function Semana({ boot, week, weekObj }) {
     cur.status = newStatus;
     const key = cur.fromItemId != null ? 'i' + cur.fromItemId : 't' + (cur.texto || '');
     // "Resuelto" → lo suma a Logros; "Sigue" → lo suma a En curso (esta semana). El resto los limpia.
+    const matchAuto = (it) => it._fromCarry === key || it.texto === cur.texto;
     if (newStatus === 'resuelto') {
-      const exists = x.items.some((it) => it.tipo === 'logro' && (it._fromCarry === key || it.texto === cur.texto));
-      if (!exists) x.items.push({ _k: cid(), tipo: 'logro', texto: cur.texto, estado: 'na', necesitaDe: null, tags: [], areaObjectiveId: null, _fromCarry: key });
+      if (!x.items.some((it) => it.tipo === 'logro' && matchAuto(it))) x.items.push({ _k: cid(), tipo: 'logro', texto: cur.texto, estado: 'na', necesitaDe: null, tags: [], areaObjectiveId: null, _fromCarry: key });
     } else {
-      x.items = x.items.filter((it) => !(it.tipo === 'logro' && it._fromCarry === key));
+      x.items = x.items.filter((it) => !(it.tipo === 'logro' && matchAuto(it)));
     }
     if (newStatus === 'sigue') {
-      const exists = x.items.some((it) => it.tipo === 'en_curso' && (it._fromCarry === key || it.texto === cur.texto));
-      if (!exists) x.items.push({ _k: cid(), tipo: 'en_curso', texto: cur.texto, estado: 'na', necesitaDe: null, tags: [], areaObjectiveId: null, _fromCarry: key });
+      if (!x.items.some((it) => it.tipo === 'en_curso' && matchAuto(it))) x.items.push({ _k: cid(), tipo: 'en_curso', texto: cur.texto, estado: 'na', necesitaDe: null, tags: [], areaObjectiveId: null, _fromCarry: key });
     } else {
-      x.items = x.items.filter((it) => !(it.tipo === 'en_curso' && it._fromCarry === key));
+      x.items = x.items.filter((it) => !(it.tipo === 'en_curso' && matchAuto(it)));
     }
   };
 

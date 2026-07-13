@@ -94,7 +94,7 @@ function buildCarry(uid, weekId) {
     .map((it) => ({ srcTipo: it.tipo, texto: it.texto, status: 'pendiente', necesitaDe: it.necesitaDe || null, fromItemId: it.id }));
   // Los "sigue" de la semana pasada vuelven a aparecer hasta resolverse.
   const fromCarry = (pe.carry || []).filter((c) => c.status === 'sigue')
-    .map((c) => ({ srcTipo: c.srcTipo, texto: c.texto, status: 'pendiente', necesitaDe: c.necesitaDe || null, fromItemId: c.fromItemId }));
+    .map((c) => ({ srcTipo: c.srcTipo, texto: c.texto, status: 'sigue', necesitaDe: c.necesitaDe || null, fromItemId: c.fromItemId }));
   const out = []; const seen = new Set();
   for (const c of [...fromItems, ...fromCarry]) {
     const k = c.fromItemId != null ? 'i' + c.fromItemId : 't' + (c.texto || '');
@@ -104,9 +104,22 @@ function buildCarry(uid, weekId) {
   return out;
 }
 function entryData(uid, weekId) {
-  const e = store.entries[uid + '|' + weekId];
-  if (!e) return { submitted: false, items: [], carry: buildCarry(uid, weekId) };
-  if (!e.carry) { e.carry = buildCarry(uid, weekId); persist(); }
+  let e = store.entries[uid + '|' + weekId];
+  const expected = buildCarry(uid, weekId);
+  if (!e) {
+    if (!expected.length) return { submitted: false, items: [], carry: [] };
+    e = store.entries[uid + '|' + weekId] = { submitted: false, items: [], carry: [] };
+  }
+  if (!e.carry) e.carry = [];
+  const keyOf = (c) => (c.fromItemId != null ? 'i' + c.fromItemId : 't' + (c.texto || ''));
+  const have = new Set(e.carry.map(keyOf));
+  for (const c of expected) { if (!have.has(keyOf(c))) { e.carry.push(c); have.add(keyOf(c)); } }
+  for (const c of e.carry) {
+    if (c.status !== 'sigue' || !c.texto) continue;
+    if (e.items.some((it) => it.tipo === 'en_curso' && it.texto === c.texto)) continue;
+    e.items.push({ id: iid(), tipo: 'en_curso', texto: c.texto, estado: 'na', necesitaDe: null, tags: [], areaObjectiveId: null });
+  }
+  persist();
   return clone(e);
 }
 
