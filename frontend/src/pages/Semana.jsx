@@ -72,11 +72,18 @@ export default function Semana({ boot, week, weekObj }) {
     const newStatus = toggle && cur.status === st ? 'pendiente' : st;
     cur.status = newStatus;
     const key = cur.fromItemId != null ? 'i' + cur.fromItemId : 't' + (cur.texto || '');
+    // "Resuelto" → lo suma a Logros; "Sigue" → lo suma a En curso (esta semana). El resto los limpia.
     if (newStatus === 'resuelto') {
       const exists = x.items.some((it) => it.tipo === 'logro' && (it._fromCarry === key || it.texto === cur.texto));
       if (!exists) x.items.push({ _k: cid(), tipo: 'logro', texto: cur.texto, estado: 'na', necesitaDe: null, tags: [], areaObjectiveId: null, _fromCarry: key });
     } else {
       x.items = x.items.filter((it) => !(it.tipo === 'logro' && it._fromCarry === key));
+    }
+    if (newStatus === 'sigue') {
+      const exists = x.items.some((it) => it.tipo === 'en_curso' && (it._fromCarry === key || it.texto === cur.texto));
+      if (!exists) x.items.push({ _k: cid(), tipo: 'en_curso', texto: cur.texto, estado: 'na', necesitaDe: null, tags: [], areaObjectiveId: null, _fromCarry: key });
+    } else {
+      x.items = x.items.filter((it) => !(it.tipo === 'en_curso' && it._fromCarry === key));
     }
   };
 

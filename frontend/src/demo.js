@@ -90,8 +90,18 @@ function buildCarry(uid, weekId) {
   if (!pw) return [];
   const pe = store.entries[uid + '|' + pw.id];
   if (!pe) return [];
-  return pe.items.filter((it) => it.tipo === 'proximo' || (it.tipo === 'bloqueo' && it.estado !== 'resuelto'))
+  const fromItems = pe.items.filter((it) => it.tipo === 'proximo' || (it.tipo === 'bloqueo' && it.estado !== 'resuelto'))
     .map((it) => ({ srcTipo: it.tipo, texto: it.texto, status: 'pendiente', necesitaDe: it.necesitaDe || null, fromItemId: it.id }));
+  // Los "sigue" de la semana pasada vuelven a aparecer hasta resolverse.
+  const fromCarry = (pe.carry || []).filter((c) => c.status === 'sigue')
+    .map((c) => ({ srcTipo: c.srcTipo, texto: c.texto, status: 'pendiente', necesitaDe: c.necesitaDe || null, fromItemId: c.fromItemId }));
+  const out = []; const seen = new Set();
+  for (const c of [...fromItems, ...fromCarry]) {
+    const k = c.fromItemId != null ? 'i' + c.fromItemId : 't' + (c.texto || '');
+    if (seen.has(k)) continue;
+    seen.add(k); out.push(c);
+  }
+  return out;
 }
 function entryData(uid, weekId) {
   const e = store.entries[uid + '|' + weekId];

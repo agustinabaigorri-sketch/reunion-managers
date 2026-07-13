@@ -50,9 +50,24 @@ async function buildCarryFromPrev(userId, week) {
   const { rows: pe } = await q(`select id from entries where user_id=$1 and week_id=$2`, [userId, prev[0].id]);
   if (!pe[0]) return [];
   const items = await loadItems(pe[0].id);
-  return items
+  const fromItems = items
     .filter((it) => it.tipo === 'proximo' || (it.tipo === 'bloqueo' && it.estado !== 'resuelto'))
     .map((it) => ({ srcTipo: it.tipo, texto: it.texto, status: 'pendiente', necesitaDe: it.necesitaDe, fromItemId: it.id }));
+  // Los compromisos/bloqueos que la semana pasada quedaron en "sigue" vuelven a aparecer,
+  // semana a semana, hasta que se marquen resueltos (o se caigan).
+  const prevCarry = await loadCarry(pe[0].id);
+  const fromCarry = prevCarry
+    .filter((c) => c.status === 'sigue')
+    .map((c) => ({ srcTipo: c.srcTipo, texto: c.texto, status: 'pendiente', necesitaDe: c.necesitaDe, fromItemId: c.fromItemId }));
+  const out = [];
+  const seen = new Set();
+  for (const c of [...fromItems, ...fromCarry]) {
+    const k = c.fromItemId != null ? 'i' + c.fromItemId : 't' + (c.texto || '');
+    if (seen.has(k)) continue;
+    seen.add(k);
+    out.push(c);
+  }
+  return out;
 }
 
 async function getEntryData(userId, week) {
