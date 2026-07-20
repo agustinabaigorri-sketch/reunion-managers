@@ -20,21 +20,48 @@ export default function Admin({ boot, reload }) {
       <div className="tcard" style={{ marginTop: 16 }}>
         <div className="tcard-h">Usuarios <span className="count">{boot.users.filter((u) => u.activo).length}</span></div>
         <table className="adm">
-          <thead><tr><th>Nombre</th><th>Email</th><th>Área</th><th>Rol</th><th>Presenta</th><th /></tr></thead>
+          <thead><tr><th>Nombre</th><th>Email</th><th>Áreas</th><th>Reporta a</th><th>Rol</th><th>Presenta</th><th /></tr></thead>
           <tbody>
-            {boot.users.filter((u) => u.activo).map((u) => (
+            {boot.users.filter((u) => u.activo).map((u) => {
+              const areaName = (aid) => (boot.areas.find((a) => a.id === aid) || {}).nombre || '¿?';
+              const extra = (u.area_ids || []).filter((a) => a !== u.area_id);
+              const addArea = (aid) => run(() => api.updUser(u.id, { area_ids: [...new Set([...(u.area_ids || []), u.area_id, aid].filter(Boolean))] }));
+              const rmArea = (aid) => run(() => api.updUser(u.id, { area_ids: (u.area_ids || []).filter((a) => a !== aid) }));
+              const canAdd = boot.areas.filter((a) => !(u.area_ids || []).includes(a.id) && a.id !== u.area_id);
+              return (
               <tr key={u.id}>
                 <td><input type="text" defaultValue={u.nombre} onBlur={(e) => e.target.value !== u.nombre && run(() => api.updUser(u.id, { nombre: e.target.value }))} /></td>
                 <td className="muted small">{u.email}</td>
                 <td>
-                  <select value={u.area_id || ''} onChange={(e) => run(() => api.updUser(u.id, { area_id: e.target.value ? Number(e.target.value) : null }))}>
+                  <select value={u.area_id || ''} onChange={(e) => run(() => api.updUser(u.id, { area_id: e.target.value ? Number(e.target.value) : null }))} title="área principal">
                     <option value="">— sin área —</option>
                     {boot.areas.map((a) => <option key={a.id} value={a.id}>{a.nombre}</option>)}
+                  </select>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 4, alignItems: 'center' }}>
+                    {extra.map((aid) => (
+                      <span key={aid} className="tag" style={{ padding: '2px 7px', fontSize: 11 }}>
+                        {areaName(aid)}
+                        <x onClick={() => rmArea(aid)} title="quitar área">×</x>
+                      </span>
+                    ))}
+                    {canAdd.length > 0 && (
+                      <select value="" onChange={(e) => { if (e.target.value) addArea(Number(e.target.value)); }} style={{ fontSize: 11, padding: '2px 4px', maxWidth: 130 }} title="sumar otra área">
+                        <option value="">+ área…</option>
+                        {canAdd.map((a) => <option key={a.id} value={a.id}>{a.nombre}</option>)}
+                      </select>
+                    )}
+                  </div>
+                </td>
+                <td>
+                  <select value={u.reporta_a || ''} onChange={(e) => run(() => api.updUser(u.id, { reporta_a: e.target.value ? Number(e.target.value) : null }))} title="a quién le reporta (su jefe ve su planificación y su semana)">
+                    <option value="">— nadie —</option>
+                    {boot.users.filter((x) => x.activo && x.id !== u.id).map((x) => <option key={x.id} value={x.id}>{x.nombre}</option>)}
                   </select>
                 </td>
                 <td>
                   <select value={u.rol} onChange={(e) => run(() => api.updUser(u.id, { rol: e.target.value }))}>
                     <option value="manager">manager</option>
+                    <option value="colaborador">colaborador</option>
                     <option value="admin">admin</option>
                   </select>
                 </td>
@@ -46,7 +73,8 @@ export default function Admin({ boot, reload }) {
                   <button className="btn btn-sm btn-ghost" onClick={() => confirm('¿Dar de baja al usuario?') && run(() => api.delUser(u.id))} title="dar de baja">×</button>
                 </td>
               </tr>
-            ))}
+              );
+            })}
           </tbody>
         </table>
         <div style={{ marginTop: 12, display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
@@ -58,6 +86,7 @@ export default function Admin({ boot, reload }) {
           </select>
           <select value={nu.rol} onChange={(e) => setNu({ ...nu, rol: e.target.value })}>
             <option value="manager">manager</option>
+            <option value="colaborador">colaborador</option>
             <option value="admin">admin</option>
           </select>
           <input type="text" placeholder="contraseña inicial" value={nu.password} onChange={(e) => setNu({ ...nu, password: e.target.value })} style={{ width: 160 }} />
@@ -73,6 +102,7 @@ export default function Admin({ boot, reload }) {
           </button>
         </div>
         <p className="small muted" style={{ marginTop: 8 }}>Creás el usuario con una contraseña inicial y se la pasás. Con eso entra. Después podés cambiársela con 🔑.</p>
+        <p className="small muted" style={{ marginTop: 4 }}><b>Áreas:</b> la principal es donde carga por defecto; con “+ área” sumás otras (ej. alguien en Finanzas y Comercial). <b>Reporta a:</b> quien figure como jefe puede ver la planificación y la semana de esa persona (solo lectura). También se ven entre sí quienes comparten un área. <b>Rol colaborador:</b> no es manager; al entrar solo ve “Mi trabajo” (las tareas que le asignan en Modo trabajo) y marca estado y avance.</p>
       </div>
 
       <div className="tcard" style={{ marginTop: 14 }}>

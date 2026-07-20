@@ -243,12 +243,17 @@ export default function Reunion({ boot, week }) {
           </div>
         </div>
         {pend.length
-          ? pend.map((p, i) => (
-              <div className="pend" key={i}>
-                <span className={'chip c-' + p.c.srcTipo}><span className={'dot d-' + p.c.srcTipo} />{p.c.srcTipo === 'bloqueo' ? 'bloqueo' : 'sigue'}</span>
-                <span style={{ flex: 1 }}>{p.c.texto} <span className="muted">· {p.u.nombre}{p.c.necesitaDe ? ' → ' + L.area(p.c.necesitaDe).nombre : ''}</span></span>
-              </div>
-            ))
+          ? (
+            <div style={{ maxHeight: pend.length > 4 ? 220 : 'none', overflowY: pend.length > 4 ? 'auto' : 'visible', paddingRight: pend.length > 4 ? 4 : 0, marginRight: pend.length > 4 ? -4 : 0 }}>
+              {pend.length > 4 && <div className="small muted" style={{ marginBottom: 4 }}>{pend.length} pendientes · scrolleá para ver el resto</div>}
+              {pend.map((p, i) => (
+                <div className="pend" key={i}>
+                  <span className={'chip c-' + (p.c.srcTipo === 'bloqueo' ? 'bloqueo' : 'en_curso')}><span className={'dot d-' + (p.c.srcTipo === 'bloqueo' ? 'bloqueo' : 'en_curso')} />{p.c.srcTipo === 'bloqueo' ? 'trabado' : 'en curso'}</span>
+                  <span style={{ flex: 1 }}>{p.c.texto} <span className="muted">· {p.u.nombre}{p.c.necesitaDe ? ' → ' + L.area(p.c.necesitaDe).nombre : ''}</span></span>
+                </div>
+              ))}
+            </div>
+          )
           : <div className="small muted" style={{ marginTop: 4 }}>Todo lo comprometido se cumplió 🎉</div>}
       </div>
 

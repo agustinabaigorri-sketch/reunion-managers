@@ -3,20 +3,27 @@ import { api } from '../api';
 
 const initials = (n) => (n || '?').trim().split(/\s+/).slice(0, 2).map((x) => x[0]).join('').toUpperCase();
 const PALETTE = ['#42B3FF', '#FF6428', '#9B00AF', '#FFB800', '#2e9e5b', '#2A205E'];
+const ESTADOS = [['pendiente', '⏳ Pendiente'], ['en_progreso', '🔧 En progreso'], ['hecha', '✓ Hecha']];
+const estadoDe = (t) => t.estado || ((t.avance || 0) >= 100 ? 'hecha' : (t.avance || 0) > 0 ? 'en_progreso' : 'pendiente');
 
 export default function ModoTrabajo({ boot }) {
   const [team, setTeam] = useState(null);
   const [work, setWork] = useState([]);
   const [mine, setMine] = useState([]);
   const [objs, setObjs] = useState([]);
+  const [colabs, setColabs] = useState([]);   // pedidos de otras áreas a mi área
   const [busy, setBusy] = useState(false);
   const [nuevo, setNuevo] = useState('');
+  const isColab = boot.me.rol === 'colaborador';   // no-manager: solo ve "Mi trabajo"
   const areaId = boot.me.area_id;
   const areaObj = boot.areas.find((a) => a.id === areaId);
   const color = areaObj?.color || 'var(--eb-green)';
 
-  const load = useCallback(() => Promise.all([api.teamGet(), api.workGet(), api.workMine(), api.okrMine()])
-    .then(([t, w, m, o]) => { setTeam(t); setWork(w); setMine(m); setObjs(o); }), []);
+  const load = useCallback(() => {
+    if (isColab) return Promise.all([api.workMine(), api.okrColabMine()]).then(([m, c]) => { setMine(m); setColabs(c); setTeam({ members: [], usuarios: [] }); setWork([]); setObjs([]); });
+    return Promise.all([api.teamGet(), api.workGet(), api.workMine(), api.okrMine(), api.okrColabMine()])
+      .then(([t, w, m, o, c]) => { setTeam(t); setWork(w); setMine(m); setObjs(o); setColabs(c); });
+  }, [isColab]);
   useEffect(() => { load(); }, [load]);
   const run = async (fn) => { setBusy(true); try { await fn(); await load(); } catch (e) { alert(e.message); } finally { setBusy(false); } };
 
@@ -39,35 +46,69 @@ export default function ModoTrabajo({ boot }) {
   return (
     <div style={{ opacity: busy ? 0.6 : 1 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-        <span style={{ fontSize: 11, letterSpacing: '.06em', textTransform: 'uppercase', color: '#fff', background: '#2A205E', padding: '5px 12px', borderRadius: 20, fontWeight: 600 }}>🛠 Modo trabajo</span>
-        <h2 style={{ margin: 0 }}>{areaObj?.nombre}</h2>
+        <span style={{ fontSize: 11, letterSpacing: '.06em', textTransform: 'uppercase', color: '#fff', background: '#2A205E', padding: '5px 12px', borderRadius: 20, fontWeight: 600 }}>{isColab ? '🧑‍💻 Mi trabajo' : '🛠 Modo trabajo'}</span>
+        <h2 style={{ margin: 0 }}>{isColab ? `Hola, ${boot.me.nombre.split(' ')[0]} 👋` : areaObj?.nombre}</h2>
       </div>
-      <p className="sub">Repartí el trabajo del equipo. Cada persona vinculada ve sus tareas y marca su avance. El % de los KR se sigue marcando aparte en Mi planificación.</p>
+      <p className="sub">{isColab ? 'Estas son las tareas que te asignaron. Marcá el estado y el avance de cada una; al 100% queda cumplida.' : 'Repartí el trabajo del equipo. Cada persona vinculada ve sus tareas y marca su avance. El % de los KR se sigue marcando aparte en Mi planificación.'}</p>
 
       {/* Mi trabajo (tareas asignadas a mí) */}
-      {mine.length > 0 && (
+      {(isColab || mine.length > 0) && (
         <div className="tcard" style={{ marginTop: 6, borderLeft: '3px solid ' + color }}>
           <b style={{ fontSize: 14 }}>Mi trabajo</b>
-          <span className="muted small"> · {mine.filter((t) => (t.avance || 0) >= 100).length}/{mine.length} listas</span>
-          {mine.map((t) => (
+          <span className="muted small"> · {mine.filter((t) => estadoDe(t) === 'hecha').length}/{mine.length} cumplidas</span>
+          {mine.length === 0 && <div className="empty" style={{ marginTop: 8 }}>No tenés tareas asignadas por ahora.</div>}
+          {mine.map((t) => {
+            const cumplida = estadoDe(t) === 'hecha';
+            return (
             <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '8px 0', borderTop: '1px solid var(--line)', flexWrap: 'wrap' }}>
               <div style={{ flex: 1, minWidth: 160 }}>
-                <div className="small" style={{ textDecoration: (t.avance || 0) >= 100 ? 'line-through' : 'none', color: (t.avance || 0) >= 100 ? 'var(--hint)' : 'var(--text)' }}>{t.texto || '(sin texto)'}</div>
-                <div style={{ display: 'flex', gap: 8, marginTop: 2 }}>
+                <div className="small" style={{ textDecoration: cumplida ? 'line-through' : 'none', color: cumplida ? 'var(--hint)' : 'var(--text)' }}>{t.texto || '(sin texto)'}</div>
+                <div style={{ display: 'flex', gap: 8, marginTop: 2, flexWrap: 'wrap' }}>
                   {t.objetivo && <span style={{ fontSize: 10, color: '#7a1a86', background: '#F5E6F7', padding: '1px 7px', borderRadius: 5 }}>KR · {t.objetivo}</span>}
                   {t.vence && <span className="muted" style={{ fontSize: 11 }}>vence {t.vence}</span>}
                   {t.area_nombre && t.area_id !== areaId && <span className="muted" style={{ fontSize: 11 }}>· {t.area_nombre}</span>}
                 </div>
               </div>
+              <select value={estadoDe(t)} onChange={(e) => run(() => api.workUpd(t.id, { estado: e.target.value }))} title="estado" style={{ fontSize: 11.5, padding: '3px 5px', flex: 'none' }}>
+                {ESTADOS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+              </select>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, width: 120 }}>
-                <div className="bar-track"><div className="bar-fill" style={{ width: (t.avance || 0) + '%', background: (t.avance || 0) >= 100 ? '#2e9e5b' : color }} /></div>
+                <div className="bar-track"><div className="bar-fill" style={{ width: (t.avance || 0) + '%', background: cumplida ? '#2e9e5b' : color }} /></div>
                 <input type="number" min="0" max="100" defaultValue={t.avance || 0} key={t.avance} onBlur={(e) => { const v = Math.max(0, Math.min(100, +e.target.value)); if (v !== (t.avance || 0)) run(() => api.workUpd(t.id, { avance: v })); }} style={{ width: 56, padding: '3px 4px', fontSize: 12, textAlign: 'center' }} />
               </div>
             </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
+      {/* Pedidos de colaboración de otras áreas a mi área */}
+      {colabs.filter((c) => c.estado === 'pendiente' || c.estado === 'tomado').length > 0 && (
+        <div className="tcard" style={{ marginTop: 12, borderLeft: '3px solid #1F86D6' }}>
+          <b style={{ fontSize: 14 }}>Otras áreas te pidieron</b>
+          <span className="muted small"> · {colabs.filter((c) => c.estado === 'pendiente').length} pendiente(s)</span>
+          {colabs.filter((c) => c.estado === 'pendiente' || c.estado === 'tomado').map((c) => {
+            const oa = boot.areas.find((a) => a.id === c.owner_area_id) || { nombre: '—', color: '#888' };
+            return (
+              <div key={c.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 9, padding: '8px 0', borderTop: '1px solid var(--line)', flexWrap: 'wrap' }}>
+                <span style={{ width: 26, height: 26, borderRadius: 7, background: oa.color, color: '#fff', fontSize: 10, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 'none' }}>{(oa.nombre || '').slice(0, 2).toUpperCase()}</span>
+                <div style={{ flex: 1, minWidth: 160 }}>
+                  <div className="small"><b>{oa.nombre}</b> te necesita en <b>{c.objetivo || '(sin título)'}</b> <span className="muted">· Q{c.trimestre}</span></div>
+                  <div className="small muted" style={{ marginTop: 2 }}>→ {c.pedido ? <span style={{ color: 'var(--text)' }}>{c.pedido}</span> : <i>(sin detalle)</i>}</div>
+                </div>
+                {c.estado === 'tomado'
+                  ? <div style={{ display: 'flex', gap: 4, flex: 'none' }}>
+                      <button className="btn btn-sm" onClick={() => run(() => api.okrColabUpd(c.id, { estado: 'hecho' }))} title="marcar como hecho">✓ listo</button>
+                      <button className="btn btn-sm btn-ghost" onClick={() => run(() => api.okrColabUpd(c.id, { estado: 'pendiente' }))} title="soltar">×</button>
+                    </div>
+                  : <button className="btn btn-sm" style={{ flex: 'none' }} onClick={() => run(() => api.okrColabUpd(c.id, { estado: 'tomado' }))}>tomarlo</button>}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {!isColab && (<>
       {/* Mi equipo: alta de miembros */}
       <div className="area-h" style={{ margin: '20px 0 8px' }}>
         <b style={{ fontSize: 14 }}>Mi equipo</b><span className="ln" />
@@ -113,9 +154,12 @@ export default function ModoTrabajo({ boot }) {
                     </select>
                     <input type="date" defaultValue={t.vence || ''} onChange={(e) => run(() => api.workUpd(t.id, { vence: e.target.value || null }))} title="vence" style={{ fontSize: 11, padding: '2px 4px' }} />
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6 }}>
-                    <div className="bar-track"><div className="bar-fill" style={{ width: (t.avance || 0) + '%', background: (t.avance || 0) >= 100 ? '#2e9e5b' : color }} /></div>
-                    <input type="number" min="0" max="100" defaultValue={t.avance || 0} key={t.avance} onBlur={(e) => { const v = Math.max(0, Math.min(100, +e.target.value)); if (v !== (t.avance || 0)) run(() => api.workUpd(t.id, { avance: v })); }} style={{ width: 54, padding: '2px 4px', fontSize: 12, textAlign: 'center' }} />
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 6 }}>
+                    <select value={estadoDe(t)} onChange={(e) => run(() => api.workUpd(t.id, { estado: e.target.value }))} title="estado" style={{ fontSize: 10.5, padding: '2px 3px', flex: 'none' }}>
+                      {ESTADOS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                    </select>
+                    <div className="bar-track"><div className="bar-fill" style={{ width: (t.avance || 0) + '%', background: estadoDe(t) === 'hecha' ? '#2e9e5b' : color }} /></div>
+                    <input type="number" min="0" max="100" defaultValue={t.avance || 0} key={t.avance} onBlur={(e) => { const v = Math.max(0, Math.min(100, +e.target.value)); if (v !== (t.avance || 0)) run(() => api.workUpd(t.id, { avance: v })); }} style={{ width: 48, padding: '2px 4px', fontSize: 12, textAlign: 'center' }} />
                     <button className="btn btn-sm btn-ghost" title="eliminar tarea" onClick={() => run(() => api.workDel(t.id))} style={{ padding: '0 5px' }}>×</button>
                   </div>
                 </div>
@@ -126,6 +170,7 @@ export default function ModoTrabajo({ boot }) {
           );
         })}
       </div>
+      </>)}
     </div>
   );
 }

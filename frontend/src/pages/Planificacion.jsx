@@ -114,6 +114,27 @@ export default function Planificacion({ boot }) {
             </div>
           ))}
           {isAdmin && <button className="btn btn-primary" style={{ marginTop: 16 }} onClick={() => run(() => api.okrAddObjective({ anio, titulo: 'Nuevo objetivo anual', prioridad: 'media' }))}>+ Objetivo de empresa</button>}
+
+          {isAdmin && (data.unassigned || []).length > 0 && (
+            <div className="tcard" style={{ marginTop: 20, borderLeft: '3px solid #E0A106' }}>
+              <div className="tcard-h">Objetivos de área sin agrupar <span className="count">{data.unassigned.length}</span></div>
+              <p className="small muted" style={{ margin: '-2px 0 8px' }}>Objetivos que las áreas ya cargaron en Mi planificación pero que todavía no cuelgan de ningún objetivo de empresa. Asignales uno para agruparlos.</p>
+              {data.unassigned.map((a) => (
+                <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 0', borderTop: '1px solid var(--line)', flexWrap: 'wrap' }}>
+                  <span style={{ width: 24, height: 24, borderRadius: 6, background: a.area_color || '#888', color: '#fff', fontSize: 10, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 'none' }}>{(a.area_nombre || '—').slice(0, 2).toUpperCase()}</span>
+                  <span className="small muted" style={{ minWidth: 90 }}>{a.area_nombre}</span>
+                  <span className="chip" style={{ background: '#eef1f4', color: '#54606e' }}>Q{a.trimestre}</span>
+                  <span style={{ flex: 1, minWidth: 160 }}>{a.titulo || '(sin título)'}</span>
+                  {data.objectives.length === 0
+                    ? <span className="small muted">creá un objetivo de empresa para agrupar</span>
+                    : <select value="" onChange={(e) => { if (e.target.value) run(() => api.okrUpdAO(a.id, { objective_id: Number(e.target.value) })); }} style={{ padding: '5px 7px', fontSize: 12.5 }}>
+                        <option value="">agrupar en…</option>
+                        {data.objectives.map((o) => <option key={o.id} value={o.id}>{o.titulo}</option>)}
+                      </select>}
+                </div>
+              ))}
+            </div>
+          )}
         </>
       )}
 

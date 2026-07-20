@@ -40,6 +40,11 @@ export async function auth(req, res, next) {
     const { rows } = await q(`select * from users where id=$1 and activo=true`, [uid]);
     if (!rows[0]) return res.status(401).json({ error: 'sesión inválida' });
     req.user = rows[0];
+    // Áreas a las que pertenece (multi-área). Incluye la histórica users.area_id por las dudas.
+    const ar = await q(`select area_id from user_areas where user_id=$1`, [uid]).catch(() => ({ rows: [] }));
+    const set = new Set(ar.rows.map((r) => r.area_id));
+    if (req.user.area_id != null) set.add(req.user.area_id);
+    req.user.area_ids = [...set];
     next();
   } catch (e) {
     res.status(401).json({ error: 'sesión inválida' });

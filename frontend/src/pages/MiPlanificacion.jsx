@@ -29,16 +29,27 @@ export default function MiPlanificacion({ boot }) {
   const [rejectFor, setRejectFor] = useState(null);
   const [asof, setAsof] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [viewUser, setViewUser] = useState(null);   // null = mi plan; id = ver el plan de esa persona (solo lectura)
+  const [viewArea, setViewArea] = useState(null);    // null = todas las áreas del plan
+  const [visible, setVisible] = useState([]);        // personas que puedo ver
+  const [dgRej, setDgRej] = useState(null);          // rechazos de toda la empresa (solo Dirección General)
   const areaId = boot.me.area_id;
   const areaObj = boot.areas.find((a) => a.id === areaId);
-  const color = areaObj?.color || 'var(--eb-green)';
   const otras = boot.areas.filter((a) => a.id !== areaId);
   const areaById = (id) => boot.areas.find((a) => a.id === id) || { nombre: '—', color: 'var(--muted)' };
 
-  const load = useCallback((anio, asofDate) => Promise.all([api.okrMyPlan(anio, asofDate), api.okrColabMine(anio), api.okrColabRejected()]).then(([d, tn, rj]) => { setData(d); setTeNec(tn); setRejected(rj); }), []);
-  useEffect(() => { load(); }, [load]);
+  const load = (anio, asofDate, user = viewUser, area = viewArea) => {
+    const isSelf = !user;
+    const calls = [api.okrMyPlan(anio, asofDate, { user, area })];
+    if (isSelf) calls.push(api.okrColabMine(anio), api.okrColabRejected(), api.okrRejectionsAll());
+    return Promise.all(calls).then(([d, tn, rj, dg]) => { setData(d); setTeNec(isSelf ? (tn || []) : []); setRejected(isSelf ? (rj || []) : []); setDgRej(isSelf ? (dg || null) : null); });
+  };
+  useEffect(() => { load(); api.visibleUsers().then(setVisible).catch(() => setVisible([])); }, []);
   const verAsof = (v) => { setAsof(v || null); load(data?.anio, v || null); };
   const run = async (fn) => { setBusy(true); try { await fn(); await load(data?.anio, asof); } catch (e) { alert(e.message); } finally { setBusy(false); } };
+  // Cambiar a ver el plan de otra persona (o volver al mío); resetea el filtro de área.
+  const switchView = (userId) => { setViewUser(userId); setViewArea(null); load(data?.anio, asof, userId, null); };
+  const switchArea = (aid) => { setViewArea(aid); load(data?.anio, asof, viewUser, aid); };
 
   if (!areaId) return (
     <div><h2>Mi planificación</h2>
@@ -47,6 +58,11 @@ export default function MiPlanificacion({ boot }) {
   );
   if (!data) return <div style={{ color: 'var(--muted)' }}>Cargando…</div>;
   const anio = data.anio;
+  const readonly = !!data.readonly;
+  const planAreas = data.areas || [];
+  const shownAreaId = viewArea || (planAreas.length === 1 ? planAreas[0].id : areaId);
+  const color = (boot.areas.find((a) => a.id === shownAreaId) || areaObj || {}).color || 'var(--eb-green)';
+  const addAreaId = viewArea || (planAreas[0] && planAreas[0].id) || areaId;
   const aoPct = (a) => { const m = a.metas || []; return m.length ? Math.round(m.reduce((s, x) => s + (x.avance || 0), 0) / m.length) : 0; };
   const PRANK = { alta: 0, media: 1, baja: 2 };
   const moveMeta = (a, idx, dir) => { const ids = (a.metas || []).map((m) => m.id); const j = idx + dir; if (j < 0 || j >= ids.length) return; [ids[idx], ids[j]] = [ids[j], ids[idx]]; run(() => api.okrMetaReorder(a.id, ids)); };
@@ -56,20 +72,55 @@ export default function MiPlanificacion({ boot }) {
     <div style={{ opacity: busy ? 0.6 : 1 }}>
       <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
         <div>
-          <h2>Mi planificación · {areaObj?.nombre}</h2>
-          <p className="sub">Cargá los objetivos de tu área por trimestre, dividí cada uno en metas y marcalas a medida que las cerrás (arman el %). Marcá si hay otras áreas involucradas.</p>
+          <h2>{readonly && data.viewing ? `Plan de ${data.viewing.nombre}` : 'Mi planificación'}{!readonly && areaObj ? ` · ${areaObj.nombre}` : ''}</h2>
+          <p className="sub">{readonly ? 'Estás viendo este plan en solo lectura.' : 'Cargá los objetivos de tu área por trimestre, dividí cada uno en metas y marcalas a medida que las cerrás (arman el %). Marcá si hay otras áreas involucradas.'}</p>
         </div>
         <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+          {visible.length > 0 && (
+            <select value={viewUser || ''} onChange={(e) => switchView(e.target.value ? Number(e.target.value) : null)} title="ver la planificación de otra persona" style={{ padding: '5px 8px', fontSize: 12.5, fontWeight: 600, borderColor: readonly ? '#1F86D6' : undefined, color: readonly ? '#1F86D6' : undefined }}>
+              <option value="">👁 Mi plan</option>
+              {visible.map((v) => <option key={v.id} value={v.id}>{v.nombre}{v.rel === 'reporte' ? ' · mi reporte' : ''}</option>)}
+            </select>
+          )}
+          {planAreas.length > 1 && (
+            <select value={viewArea || ''} onChange={(e) => switchArea(e.target.value ? Number(e.target.value) : null)} title="filtrar por área" style={{ padding: '5px 8px', fontSize: 12.5 }}>
+              <option value="">Todas las áreas</option>
+              {planAreas.map((a) => <option key={a.id} value={a.id}>{a.nombre}</option>)}
+            </select>
+          )}
           {/* "ver a fecha" oculto por ahora — el estado/lógica quedan dormidos (asof), se reactiva cuando lo definamos */}
           <button className="btn btn-sm" onClick={() => load(anio - 1, asof)}>‹ {anio - 1}</button>
           <button className="btn btn-sm" onClick={() => load(anio + 1, asof)}>{anio + 1} ›</button>
         </div>
       </div>
 
+      {readonly && (
+        <div style={{ marginTop: 12, background: '#E7F1FB', border: '1px solid #9CC6EC', borderRadius: 10, padding: '9px 13px', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 13, color: '#1F5C99' }}>👁 Estás viendo el plan de <b>{data.viewing?.nombre}</b> (solo lectura).</span>
+          <button className="btn btn-sm" style={{ marginLeft: 'auto' }} onClick={() => switchView(null)}>volver a mi plan</button>
+        </div>
+      )}
+
       {asof && (
         <div style={{ marginTop: 12, background: '#FFF3D6', border: '1px solid #E6C766', borderRadius: 10, padding: '9px 13px', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
           <span style={{ fontSize: 13, color: '#7a5a00' }}>👁 Estás viendo el plan <b>como estaba al {asof}</b> (solo lectura — objetivos y metas creados hasta esa fecha).</span>
           <button className="btn btn-sm" style={{ marginLeft: 'auto' }} onClick={() => verAsof(null)}>volver al plan actual</button>
+        </div>
+      )}
+
+      {dgRej?.isDG && dgRej.rejections.length > 0 && (
+        <div className="tcard" style={{ marginTop: 14, borderLeft: '3px solid #2A205E', background: '#F1EFF9' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 4 }}>
+            <span style={{ width: 9, height: 9, borderRadius: '50%', background: '#2A205E' }} />
+            <b style={{ fontSize: 14 }}>Dirección General · rechazos en la empresa</b>
+            <span className="muted small">· {dgRej.rejections.length} tarea(s) rechazada(s) entre áreas</span>
+          </div>
+          {dgRej.rejections.map((r) => (
+            <div key={r.id} style={{ padding: '7px 0', borderTop: '1px solid var(--line)' }}>
+              <div className="small"><b>{areaById(r.by_area_id).nombre}</b> rechazó lo que le pidió <b>{areaById(r.owner_area_id).nombre}</b> en <b>{r.objetivo || '(sin título)'}</b> <span className="muted">· Q{r.trimestre}</span></div>
+              <div className="small muted" style={{ marginTop: 2 }}>pedido: {r.pedido || <i>(sin detalle)</i>} — <span style={{ color: 'var(--red)' }}>motivo: {r.motivo || 'sin motivo'}</span></div>
+            </div>
+          ))}
         </div>
       )}
 
@@ -135,7 +186,7 @@ export default function MiPlanificacion({ boot }) {
         </div>
       )}
 
-      <div style={{ pointerEvents: asof ? 'none' : 'auto' }}>
+      <div style={{ pointerEvents: (asof || readonly) ? 'none' : 'auto', opacity: readonly ? 0.92 : 1 }}>
       {QOPTS.map((q) => {
         const items = data.objectives.filter((a) => a.trimestre === q).sort((a, b) => PRANK[a.prioridad || 'media'] - PRANK[b.prioridad || 'media']);
         return (
@@ -144,7 +195,7 @@ export default function MiPlanificacion({ boot }) {
               <span className="chip" style={{ background: color + '22', color, fontSize: 12, padding: '2px 10px', borderRadius: 7 }}>Q{q}</span>
               <span className="muted small">{QLABEL[q - 1]}</span><span className="ln" />
             </div>
-            {items.length === 0 && <div className="empty" style={{ marginLeft: 2 }}>Sin objetivos cargados para este trimestre.</div>}
+            {items.length === 0 && <div className="empty" style={{ marginLeft: 2 }}>Sin objetivos {readonly ? 'en' : 'cargados para'} este trimestre.</div>}
             {items.map((a) => (
               <div className="tcard" key={a.id} style={{ marginBottom: 10 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
@@ -228,7 +279,7 @@ export default function MiPlanificacion({ boot }) {
                 </div>
               </div>
             ))}
-            <button className="btn btn-sm btn-ghost" onClick={() => run(() => api.okrAddAO({ area_id: areaId, anio, trimestre: q, titulo: '' }))}>+ agregar objetivo (Q{q})</button>
+            {!readonly && <button className="btn btn-sm btn-ghost" onClick={() => run(() => api.okrAddAO({ area_id: addAreaId, anio, trimestre: q, titulo: '' }))}>+ agregar objetivo (Q{q})</button>}
           </div>
         );
       })}
@@ -241,7 +292,15 @@ export default function MiPlanificacion({ boot }) {
             <div style={{ padding: '2px 2px 10px', fontSize: 13, color: 'var(--muted)' }}>
               «{rejectFor.pedido || 'sin detalle'}» — en <b>{rejectFor.objetivo}</b>. Elegí el motivo:
             </div>
-            {(boot.rejectReasons || []).length === 0 && <div className="empty">No hay motivos cargados. Pedile a un administrador que los cargue en Administración.</div>}
+            {(boot.rejectReasons || []).length === 0 && (
+              <>
+                <div className="empty" style={{ marginBottom: 6 }}>No hay motivos cargados (un admin los carga en Administración).</div>
+                <button className="sheet-opt" onClick={() => { const t = rejectFor; setRejectFor(null); run(() => api.okrColabUpd(t.id, { estado: 'rechazado', motivo: 'Sin motivo especificado' })); }}>
+                  <span className="dot" style={{ background: 'var(--red)', width: 9, height: 9 }} />
+                  Rechazar igual (sin motivo)
+                </button>
+              </>
+            )}
             {(boot.rejectReasons || []).map((r) => (
               <button key={r.id} className="sheet-opt" onClick={() => { const t = rejectFor; setRejectFor(null); run(() => api.okrColabUpd(t.id, { estado: 'rechazado', motivo: r.texto })); }}>
                 <span className="dot" style={{ background: 'var(--red)', width: 9, height: 9 }} />

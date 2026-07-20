@@ -4,6 +4,7 @@ import { TIPOS, lookups, Ring } from '../lib.jsx';
 
 let cuid = 1;
 const cid = () => 'n' + cuid++;
+const todayStr = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
 
 const SHEET_LABEL = { pendiente: 'Marcar estado', resuelto: '✓ Resuelto', sigue: '↻ Sigue', pausado: '⏸ Pausado', cancelado: '✕ Se cayó' };
 const SHEET_OPTS = [
@@ -24,8 +25,11 @@ export default function Semana({ boot, week, weekObj }) {
   const [metas, setMetas] = useState([]);
   const [colabs, setColabs] = useState([]);
   const [tagSug, setTagSug] = useState(null);
+  const dragRef = useRef(null);
+  const [dropTipo, setDropTipo] = useState(null);
   const dirty = useRef(false);
   const canLink = objs.length > 0;
+  const gripStyle = { cursor: 'grab', color: 'var(--line-2, #aab2c0)', fontSize: 13, lineHeight: 1, padding: '0 5px', userSelect: 'none', flex: '0 0 auto', alignSelf: 'center' };
 
   useEffect(() => {
     dirty.current = false;
@@ -64,31 +68,36 @@ export default function Semana({ boot, week, weekObj }) {
   };
   const item = (c, id) => c.items.find((x) => x._k === id);
 
-  // Al marcar un compromiso/bloqueo de la semana pasada como "resuelto",
-  // lo autocompleta en Logros (para no escribirlo dos veces). Si se saca, lo quita.
+  // Marcar un arrastre: "Resuelto" lo pasa a Logros (con fecha de resolución) y frena la
+  // propagación; "Sigue"/"Se cayó"/etc. solo cambian el estado (Sigue vuelve la próxima semana,
+  // Resuelto y Se cayó no). NO materializa "En curso" (eso generaba filas fantasma).
   const applyCarry = (x, i, st, toggle) => {
     const cur = x.carry[i];
     if (!cur) return;
     const newStatus = toggle && cur.status === st ? 'pendiente' : st;
     cur.status = newStatus;
-    const key = cur.fromItemId != null ? 'i' + cur.fromItemId : 't' + (cur.texto || '');
-    // "Resuelto" → lo suma a Logros; "Sigue" → lo suma a En curso (esta semana). El resto los limpia.
+    const key = 't' + (cur.texto || '').trim().toLowerCase();
     const matchAuto = (it) => it._fromCarry === key || it.texto === cur.texto;
+    const boxTipo = cur.srcTipo === 'bloqueo' ? 'bloqueo' : 'en_curso';
     if (newStatus === 'resuelto') {
+      cur.resueltoFecha = cur.resueltoFecha || todayStr();
+      // sale de su cuadro (En curso / Trabado) y pasa a Logros
+      x.items = x.items.filter((it) => !(it.tipo === boxTipo && matchAuto(it)));
       if (!x.items.some((it) => it.tipo === 'logro' && matchAuto(it))) x.items.push({ _k: cid(), tipo: 'logro', texto: cur.texto, estado: 'na', necesitaDe: null, tags: [], areaObjectiveId: null, _fromCarry: key });
+    } else if (newStatus === 'cancelado') {
+      cur.resueltoFecha = null;
+      x.items = x.items.filter((it) => !((it.tipo === boxTipo || it.tipo === 'logro') && matchAuto(it)));
     } else {
+      cur.resueltoFecha = null;
       x.items = x.items.filter((it) => !(it.tipo === 'logro' && matchAuto(it)));
     }
-    if (newStatus === 'sigue') {
-      if (!x.items.some((it) => it.tipo === 'en_curso' && matchAuto(it))) x.items.push({ _k: cid(), tipo: 'en_curso', texto: cur.texto, estado: 'na', necesitaDe: null, tags: [], areaObjectiveId: null, _fromCarry: key });
-    } else {
-      x.items = x.items.filter((it) => !(it.tipo === 'en_curso' && matchAuto(it)));
-    }
   };
+  const setCarryDate = (i, fecha) => upd((x) => { if (x.carry[i]) x.carry[i].resueltoFecha = fecha || null; });
+  const delCarry = (i) => upd((x) => { x.carry.splice(i, 1); });
 
   const me = boot.me;
   const carry = entry.carry || [];
-  const iWait = entry.items.filter((it) => it.tipo === 'bloqueo' && it.necesitaDe && it.necesitaDe !== me.area_id);
+  const iWait = entry.items.filter((it) => it.necesitaDe && it.necesitaDe !== me.area_id);
   const totC = carry.filter((c) => c.status !== 'cancelado' && c.status !== 'pausado').length;
   const resC = carry.filter((c) => c.status === 'resuelto').length;
   const pct = totC ? Math.round((resC / totC) * 100) : 0;
@@ -99,7 +108,7 @@ export default function Semana({ boot, week, weekObj }) {
   const dueMetas = metas.filter((m) => m.vence && (!horizon || m.vence <= horizon));
   const dueColabs = colabs.filter((c) => !c.vence || !horizon || c.vence <= horizon);
   const agenda = [
-    ...dueMetas.map((m) => ({ key: 'm' + m.id, kind: 'meta', id: m.id, titulo: m.titulo, sub: m.objetivo, vence: m.vence })),
+    ...dueMetas.map((m) => ({ key: 'm' + m.id, kind: 'meta', id: m.id, titulo: m.titulo, sub: m.objetivo, vence: m.vence, aoId: m.area_objective_id })),
     ...dueColabs.map((c) => ({ key: 'c' + c.id, kind: 'colab', id: c.id, titulo: c.pedido, sub: c.objetivo, tag: c.owner_area_nombre, vence: c.vence })),
   ].sort((a, b) => (a.vence || '9999-99-99').localeCompare(b.vence || '9999-99-99'));
   const doneMeta = (id) => api.okrMetaUpd(id, { hecho: true }).then(() => api.okrMyMetas().then(setMetas)).catch(() => {});
@@ -118,6 +127,31 @@ export default function Semana({ boot, week, weekObj }) {
     } catch (e) { alert(e.message); }
   };
 
+  // Drag & drop: arrastrar una meta/colab de arriba a un cuadro (crea el ítem),
+  // o arrastrar un ítem de un cuadro a otro (le cambia el tipo).
+  const startDrag = (payload) => (e) => {
+    dragRef.current = payload;
+    e.dataTransfer.effectAllowed = payload.src === 'agenda' ? 'copy' : 'move';
+    try { e.dataTransfer.setData('text/plain', payload.texto || ''); } catch (_) {}
+  };
+  const endDrag = () => { dragRef.current = null; setDropTipo(null); };
+  const dropOnTipo = (tipo) => {
+    const d = dragRef.current;
+    endDrag();
+    if (!d) return;
+    if (d.src === 'item') {
+      upd((c) => {
+        const x = c.items.find((i) => i._k === d.key);
+        if (!x || x.tipo === tipo) return;
+        x.tipo = tipo;
+        if (tipo === 'bloqueo') { if (x.estado === 'na') x.estado = 'abierto'; }
+        else { x.estado = 'na'; x.necesitaDe = null; }
+      });
+    } else if (d.src === 'agenda') {
+      upd((c) => c.items.push({ _k: cid(), tipo, texto: d.texto || '', estado: tipo === 'bloqueo' ? 'abierto' : 'na', necesitaDe: null, tags: [], areaObjectiveId: d.aoId || null }));
+    }
+  };
+
   return (
     <div>
       <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
@@ -131,6 +165,23 @@ export default function Semana({ boot, week, weekObj }) {
           {entry.submitted ? '✓ enviado · seguir editando' : 'Enviar mi semana'}
         </button>
       </div>
+
+      {canLink && (() => {
+        const conTexto = entry.items.filter((it) => (it.texto || '').trim());
+        const link = conTexto.filter((it) => it.areaObjectiveId);
+        const pctLink = conTexto.length ? Math.round((link.length / conTexto.length) * 100) : 0;
+        const sinAsignar = conTexto.length - link.length;
+        const barColor = pctLink >= 66 ? 'var(--eb-green, #22B07D)' : pctLink >= 33 ? '#E0A106' : '#C0392B';
+        return (
+          <div style={{ marginTop: 14, background: 'var(--surface-2, #f4f6f9)', border: '1px solid var(--line)', borderRadius: 10, padding: '9px 13px', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 13, fontWeight: 600, color: barColor }}>🎯 {pctLink}% de tus tareas están vinculadas a objetivos</span>
+            <div style={{ flex: 1, minWidth: 120, maxWidth: 240, height: 8, background: 'var(--line)', borderRadius: 5, overflow: 'hidden' }}>
+              <div style={{ width: pctLink + '%', height: '100%', background: barColor }} />
+            </div>
+            <span className="muted small">{link.length} de {conTexto.length} vinculadas · {sinAsignar === 0 ? 'ninguna suelta ✓' : `${sinAsignar} sin asignar`}</span>
+          </div>
+        );
+      })()}
 
       <div className="cross" style={{ marginTop: 16 }}>
         <div className="xcard wait">
@@ -162,19 +213,26 @@ export default function Semana({ boot, week, weekObj }) {
               </div>
             </div>
           </div>
+          <div style={{ maxHeight: carry.length > 4 ? 264 : 'none', overflowY: carry.length > 4 ? 'auto' : 'visible', paddingRight: carry.length > 4 ? 4 : 0, marginRight: carry.length > 4 ? -4 : 0 }}>
           {carry.map((c, i) => {
             const done = c.status === 'resuelto' || c.status === 'cancelado';
             const set = (st) => upd((x) => applyCarry(x, i, st, true));
+            // Un compromiso de la semana pasada, al llegar a esta semana, ya está "en curso".
+            const dispTipo = c.srcTipo === 'bloqueo' ? 'bloqueo' : 'en_curso';
+            const srcLabel = dispTipo === 'bloqueo' ? 'trabado' : 'en curso';
             return (
               <div className={'todo' + (done ? ' done' : '')} key={i}>
-                <span className={'chip c-' + c.srcTipo}>
-                  <span className={'dot d-' + c.srcTipo} />
-                  {c.srcTipo === 'bloqueo' ? 'bloqueo' : 'compromiso'}
+                <span className={'chip c-' + dispTipo}>
+                  <span className={'dot d-' + dispTipo} />
+                  {srcLabel}
                 </span>
                 <span className="txt">
                   {c.texto}
                   {c.necesitaDe ? <span className="muted"> → {L.area(c.necesitaDe).nombre}</span> : null}
                 </span>
+                {c.status === 'resuelto' && (
+                  <input type="date" value={c.resueltoFecha || todayStr()} onChange={(e) => setCarryDate(i, e.target.value)} title="fecha en que se resolvió" style={{ fontSize: 11, padding: '2px 5px', flex: 'none' }} />
+                )}
                 <span className="seg">
                   <button className={c.status === 'resuelto' ? 'on-res' : ''} onClick={() => set('resuelto')}>✓ Resuelto</button>
                   <button className={c.status === 'sigue' ? 'on-sig' : ''} onClick={() => set('sigue')}>↻ Sigue</button>
@@ -182,9 +240,11 @@ export default function Semana({ boot, week, weekObj }) {
                   <button className={c.status === 'cancelado' ? 'on-can' : ''} onClick={() => set('cancelado')}>✕ Se cayó</button>
                 </span>
                 <button className={'seg-m st-' + c.status} onClick={() => setSheet(i)}>{SHEET_LABEL[c.status] || 'Marcar estado'} ▾</button>
+                <button className="btn btn-sm btn-ghost" onClick={() => delCarry(i)} title="quitar de la lista" style={{ flex: 'none' }}>×</button>
               </div>
             );
           })}
+          </div>
         </div>
       )}
 
@@ -204,6 +264,7 @@ export default function Semana({ boot, week, weekObj }) {
               const chipFg = it.kind === 'colab' ? '#7a1a86' : overdue ? 'var(--red)' : upcoming ? 'var(--muted)' : 'var(--eb-green-d)';
               return (
                 <div className="todo" key={it.key} style={{ opacity: upcoming && it.kind !== 'colab' ? 0.72 : 1, background: it.kind === 'colab' ? '#F7F3FF' : undefined, borderRadius: it.kind === 'colab' ? 8 : undefined, margin: it.kind === 'colab' ? '2px -6px' : undefined, paddingLeft: it.kind === 'colab' ? 6 : undefined, paddingRight: it.kind === 'colab' ? 6 : undefined }}>
+                  <span draggable onDragStart={startDrag({ src: 'agenda', texto: it.titulo, aoId: it.aoId })} onDragEnd={endDrag} title="arrastrá a un cuadro de abajo" style={gripStyle}>⠿</span>
                   <input type="checkbox" onChange={() => (it.kind === 'colab' ? doneColab(it.id) : doneMeta(it.id))} title="marcar como hecha" />
                   <span className="txt">
                     {it.titulo} <span className="muted">· {it.sub}</span>
@@ -227,7 +288,13 @@ export default function Semana({ boot, week, weekObj }) {
         {TIPOS.map((t) => {
           const items = entry.items.filter((it) => it.tipo === t.id);
           return (
-            <div className="tcard" key={t.id}>
+            <div
+              className="tcard"
+              key={t.id}
+              onDragOver={(e) => { if (dragRef.current) { e.preventDefault(); if (dropTipo !== t.id) setDropTipo(t.id); } }}
+              onDrop={(e) => { e.preventDefault(); dropOnTipo(t.id); }}
+              style={dropTipo === t.id ? { outline: '2px dashed var(--eb-green, #22B07D)', outlineOffset: 2, background: 'var(--eb-green-bg, #eefaf4)' } : undefined}
+            >
               <div className="tcard-h">
                 <span className={'dot d-' + t.id} />
                 {t.label}
@@ -237,6 +304,7 @@ export default function Semana({ boot, week, weekObj }) {
               {items.length === 0 && <div className="empty">— sin ítems —</div>}
               {items.map((it) => (
                 <div className="note" key={it._k}>
+                  <span draggable onDragStart={startDrag({ src: 'item', key: it._k })} onDragEnd={endDrag} title="arrastrá a otro cuadro" style={{ ...gripStyle, alignSelf: 'flex-start', marginTop: 2 }}>⠿</span>
                   <div className={'barl bl-' + it.tipo} />
                   <div className="grow">
                     <textarea
@@ -246,14 +314,18 @@ export default function Semana({ boot, week, weekObj }) {
                       value={it.texto}
                       onChange={(e) => upd((c) => (item(c, it._k).texto = e.target.value))}
                     />
-                    {it.tipo === 'bloqueo' && (
-                      <select className="need" value={it.necesitaDe || ''} onChange={(e) => upd((c) => (item(c, it._k).necesitaDe = e.target.value ? Number(e.target.value) : null))}>
-                        <option value="">¿de qué área necesitás ayuda?</option>
-                        {boot.areas.map((a) => (
-                          <option key={a.id} value={a.id}>{a.nombre}</option>
-                        ))}
-                      </select>
-                    )}
+                    <select
+                      className="need"
+                      value={it.necesitaDe || ''}
+                      onChange={(e) => upd((c) => (item(c, it._k).necesitaDe = e.target.value ? Number(e.target.value) : null))}
+                      title="¿necesitás ayuda de otra área?"
+                      style={it.necesitaDe ? { borderColor: 'var(--amber, #E0A106)', color: '#7a5a00' } : undefined}
+                    >
+                      <option value="">{it.tipo === 'bloqueo' ? '¿de qué área necesitás ayuda?' : '🙋 ¿necesitás ayuda de otra área?'}</option>
+                      {boot.areas.map((a) => (
+                        <option key={a.id} value={a.id}>{a.nombre}</option>
+                      ))}
+                    </select>
                     <div className="tags-line">
                       {it.tags.map((tg) => (
                         <span className={'tag' + (tg.startsWith('#bloqueo') ? ' b' : '')} key={tg}>
@@ -377,6 +449,6 @@ function serialize(e) {
   return {
     submitted: e.submitted,
     items: e.items.map((it) => ({ tipo: it.tipo, texto: it.texto, estado: it.estado, necesitaDe: it.necesitaDe, tags: it.tags, areaObjectiveId: it.areaObjectiveId || null })),
-    carry: e.carry.map((c) => ({ srcTipo: c.srcTipo, texto: c.texto, status: c.status, necesitaDe: c.necesitaDe, fromItemId: c.fromItemId })),
+    carry: e.carry.map((c) => ({ srcTipo: c.srcTipo, texto: c.texto, status: c.status, necesitaDe: c.necesitaDe, fromItemId: c.fromItemId, resueltoFecha: c.resueltoFecha || null, materializado: c.materializado || false })),
   };
 }

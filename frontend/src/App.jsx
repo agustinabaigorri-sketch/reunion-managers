@@ -44,8 +44,13 @@ export default function App() {
   if (!boot || !selected) return <div style={{ padding: 40, color: 'var(--muted)' }}>Cargando…</div>;
 
   const isAdmin = boot.me.rol === 'admin';
-  const tabs = [['carga', 'Mi semana'], ['reunion', 'Vista reunión'], ['metricas', 'Métricas'], ['miplan', 'Mi planificación'], ['trabajo', 'Modo trabajo'], ['tareas', 'Mis tareas']];
+  const isColab = boot.me.rol === 'colaborador';
+  // El colaborador (no-manager) solo ve "Mi trabajo"; el resto ve todo.
+  const tabs = isColab
+    ? [['trabajo', 'Mi trabajo']]
+    : [['carga', 'Mi semana'], ['reunion', 'Vista reunión'], ['miplan', 'Mi planificación'], ['trabajo', 'Modo trabajo'], ['tareas', 'Mis tareas']];
   if (isAdmin) tabs.push(['okr', 'Planificación empresa'], ['admin', 'Administración']);
+  const curView = isColab ? 'trabajo' : view;
   const logout = () => {
     setToken(null);
     setAuthed(false);
@@ -63,6 +68,7 @@ export default function App() {
           <Logo size={24} />
           <span className="applbl">Reunión semanal</span>
           <div className="spacer" />
+          {!isColab && (
           <div className="weeksel">
             <div className="wtabs">
               <button className={selected.id === prev?.id ? 'active' : ''} onClick={() => setSelected(prev)}>Anterior</button>
@@ -75,6 +81,7 @@ export default function App() {
               <input type="date" onChange={(e) => pickDate(e.target.value)} aria-label="Elegir otra semana" />
             </label>
           </div>
+          )}
           <div className="ctrl" title={boot.me.email}>
             {boot.me.nombre}
             {isAdmin ? ' ★' : ''}
@@ -84,21 +91,21 @@ export default function App() {
         </div>
         <div className="nav">
           {tabs.map((t) => (
-            <button key={t[0]} className={view === t[0] ? 'active' : ''} onClick={() => setView(t[0])}>
+            <button key={t[0]} className={curView === t[0] ? 'active' : ''} onClick={() => setView(t[0])}>
               {t[1]}
             </button>
           ))}
         </div>
       </header>
       <main>
-        {view === 'carga' && <Semana boot={boot} week={selected.id} weekObj={selected} />}
-        {view === 'reunion' && <Reunion boot={boot} week={selected.id} />}
-        {view === 'metricas' && <Metricas boot={boot} week={selected.id} />}
-        {view === 'tareas' && <MisTareas />}
-        {view === 'miplan' && <MiPlanificacion boot={boot} />}
-        {view === 'trabajo' && <ModoTrabajo boot={boot} />}
-        {view === 'okr' && isAdmin && <Planificacion boot={boot} />}
-        {view === 'admin' && isAdmin && <Admin boot={boot} reload={loadBoot} />}
+        {curView === 'carga' && <Semana boot={boot} week={selected.id} weekObj={selected} />}
+        {curView === 'reunion' && <Reunion boot={boot} week={selected.id} />}
+        {curView === 'metricas' && <Metricas boot={boot} week={selected.id} />}
+        {curView === 'tareas' && <MisTareas />}
+        {curView === 'miplan' && <MiPlanificacion boot={boot} />}
+        {curView === 'trabajo' && <ModoTrabajo boot={boot} />}
+        {curView === 'okr' && isAdmin && <Planificacion boot={boot} />}
+        {curView === 'admin' && isAdmin && <Admin boot={boot} reload={loadBoot} />}
       </main>
       {pwOpen && <ChangePassword onClose={() => setPwOpen(false)} />}
     </>

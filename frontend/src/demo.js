@@ -14,7 +14,7 @@ function seed() {
     A(1, 'Finanzas', '#42B3FF', 1), A(2, 'Comercial', '#FF6428', 2), A(3, 'Producto', '#9B00AF', 3),
     A(4, 'RRHH', '#FFB800', 4), A(5, 'Operaciones', '#2A205E', 5), A(6, 'Legales', '#1F86D6', 6),
   ];
-  const U = (id, nombre, ini, area_id, rol) => ({ id, nombre, ini, area_id, rol, activo: true, email: ini.toLowerCase() + '@educabot.com' });
+  const U = (id, nombre, ini, area_id, rol) => ({ id, nombre, ini, area_id, rol, activo: true, email: ini.toLowerCase() + '@educabot.com', area_ids: area_id != null ? [area_id] : [], reporta_a: null });
   const users = [
     U(1, 'Agustina B.', 'AB', 1, 'admin'), U(2, 'Martín R.', 'MR', 1, 'manager'),
     U(3, 'Juan M.', 'JM', 2, 'manager'), U(4, 'Sofía L.', 'SL', 2, 'manager'),
@@ -85,19 +85,22 @@ const prevWeek = (id) => {
   const w = weekById(id);
   return store.weeks.filter((x) => x.fecha_fin < w.fecha_inicio).sort((a, b) => b.fecha_fin.localeCompare(a.fecha_fin))[0] || null;
 };
+const keyOf = (c) => 't' + ((c.texto || '').trim().toLowerCase());
+const estadoW = (w) => w.estado || ((w.avance || 0) >= 100 ? 'hecha' : (w.avance || 0) > 0 ? 'en_progreso' : 'pendiente');
 function buildCarry(uid, weekId) {
   const pw = prevWeek(weekId);
   if (!pw) return [];
   const pe = store.entries[uid + '|' + pw.id];
   if (!pe) return [];
-  const fromItems = pe.items.filter((it) => (it.tipo === 'proximo' || (it.tipo === 'bloqueo' && it.estado !== 'resuelto')) && (it.texto || '').trim())
+  // Compromisos, En curso y Trabados (no resueltos) de la semana pasada vuelven a la revisión.
+  const fromItems = pe.items.filter((it) => (it.tipo === 'proximo' || it.tipo === 'en_curso' || (it.tipo === 'bloqueo' && it.estado !== 'resuelto')) && (it.texto || '').trim())
     .map((it) => ({ srcTipo: it.tipo, texto: it.texto, status: 'pendiente', necesitaDe: it.necesitaDe || null, fromItemId: it.id }));
-  // Los "sigue" de la semana pasada vuelven a aparecer hasta resolverse.
-  const fromCarry = (pe.carry || []).filter((c) => c.status === 'sigue' && (c.texto || '').trim())
-    .map((c) => ({ srcTipo: c.srcTipo, texto: c.texto, status: 'sigue', necesitaDe: c.necesitaDe || null, fromItemId: c.fromItemId }));
+  // Los arrastres abiertos (ni resueltos ni caídos) siguen apareciendo, semana a semana.
+  const fromCarry = (pe.carry || []).filter((c) => c.status !== 'resuelto' && c.status !== 'cancelado' && (c.texto || '').trim())
+    .map((c) => ({ srcTipo: c.srcTipo, texto: c.texto, status: c.status === 'pausado' ? 'pausado' : 'pendiente', necesitaDe: c.necesitaDe || null, fromItemId: c.fromItemId }));
   const out = []; const seen = new Set();
-  for (const c of [...fromItems, ...fromCarry]) {
-    const k = c.fromItemId != null ? 'i' + c.fromItemId : 't' + (c.texto || '');
+  for (const c of [...fromCarry, ...fromItems]) {
+    const k = keyOf(c);
     if (seen.has(k)) continue;
     seen.add(k); out.push(c);
   }
@@ -105,19 +108,25 @@ function buildCarry(uid, weekId) {
 }
 function entryData(uid, weekId) {
   let e = store.entries[uid + '|' + weekId];
-  const expected = buildCarry(uid, weekId);
+  const expected = buildCarry(uid, weekId).filter((c) => (c.texto || '').trim());
   if (!e) {
     if (!expected.length) return { submitted: false, items: [], carry: [] };
     e = store.entries[uid + '|' + weekId] = { submitted: false, items: [], carry: [] };
   }
   if (!e.carry) e.carry = [];
-  const keyOf = (c) => (c.fromItemId != null ? 'i' + c.fromItemId : 't' + (c.texto || ''));
+  e.carry = e.carry.filter((c) => (c.texto || '').trim());   // nunca mostramos filas en blanco
   const have = new Set(e.carry.map(keyOf));
   for (const c of expected) { if (!have.has(keyOf(c))) { e.carry.push(c); have.add(keyOf(c)); } }
+  // Materializar en su cuadro (En curso / Trabado) los arrastres abiertos, una sola vez.
+  const matTipo = (s) => (s === 'bloqueo' ? 'bloqueo' : 'en_curso');
+  const isOpen = (st) => st !== 'resuelto' && st !== 'cancelado' && st !== 'pausado';
   for (const c of e.carry) {
-    if (c.status !== 'sigue' || !c.texto) continue;
-    if (e.items.some((it) => it.tipo === 'en_curso' && it.texto === c.texto)) continue;
-    e.items.push({ id: iid(), tipo: 'en_curso', texto: c.texto, estado: 'na', necesitaDe: null, tags: [], areaObjectiveId: null });
+    if (!isOpen(c.status) || !(c.texto || '').trim() || c.materializado) continue;
+    const tipo = matTipo(c.srcTipo);
+    if (!e.items.some((it) => it.tipo === tipo && it.texto === c.texto)) {
+      e.items.push({ id: iid(), tipo, texto: c.texto, estado: tipo === 'bloqueo' ? 'abierto' : 'na', necesitaDe: c.necesitaDe || null, tags: [], areaObjectiveId: null });
+    }
+    c.materializado = true;
   }
   persist();
   return clone(e);
@@ -194,6 +203,7 @@ function okrTreeDemo(anio) {
 export const demoApi = {
   login: () => wait({ token: 'demo', user: me() }),
   changePassword: () => wait({ ok: true }),
+  changePasswordAtLogin: () => wait({ ok: true }),
   bootstrap: () => wait({ me: me(), areas: store.areas, users: store.users, tags: store.tags, weeks: [...store.weeks].reverse(), rejectReasons: store.rejectReasons || [], currentWeek: weekById(CURRENT) }),
   resolveWeek: ({ offset = 0, date } = {}) => {
     if (date) return wait(store.weeks.find((w) => date >= w.fecha_inicio && date <= w.fecha_fin) || weekById(CURRENT));
@@ -230,8 +240,18 @@ export const demoApi = {
     });
     return wait({ waitMe });
   },
-  addUser: (d) => { const id = iid(); store.users.push({ id, email: d.email, nombre: d.nombre || d.email, ini: (d.nombre || d.email).slice(0, 2).toUpperCase(), area_id: d.area_id || null, rol: d.rol || 'manager', activo: true }); persist(); return wait({ ok: true }); },
-  updUser: (id, d) => { const u = store.users.find((x) => x.id === Number(id)); if (u) Object.assign(u, Object.fromEntries(Object.entries(d).filter(([, v]) => v != null))); persist(); return wait(u); },
+  addUser: (d) => { const id = iid(); const areaIds = Array.isArray(d.area_ids) ? d.area_ids.map(Number).filter(Boolean) : []; const primary = d.area_id != null ? Number(d.area_id) : (areaIds[0] ?? null); store.users.push({ id, email: d.email, nombre: d.nombre || d.email, ini: (d.nombre || d.email).slice(0, 2).toUpperCase(), area_id: primary, rol: d.rol || 'manager', activo: true, area_ids: areaIds.length ? areaIds : (primary != null ? [primary] : []), reporta_a: d.reporta_a || null }); persist(); return wait({ ok: true }); },
+  updUser: (id, d) => {
+    const u = store.users.find((x) => x.id === Number(id));
+    if (u) {
+      ['nombre', 'email', 'rol', 'ini', 'presenta', 'password'].forEach((f) => { if (d[f] != null) u[f] = d[f]; });
+      if (d.activo != null) u.activo = d.activo;
+      if (d.area_id != null) { u.area_id = Number(d.area_id); u.area_ids = [...new Set([...(u.area_ids || []), Number(d.area_id)])]; }
+      if (Array.isArray(d.area_ids)) u.area_ids = d.area_ids.map(Number).filter(Boolean);
+      if ('reporta_a' in d) u.reporta_a = Number(d.reporta_a) === Number(id) ? null : (d.reporta_a || null);
+    }
+    persist(); return wait(u);
+  },
   delUser: (id) => { const u = store.users.find((x) => x.id === Number(id)); if (u) u.activo = false; persist(); return wait({ ok: true }); },
   addArea: (d) => { const id = iid(); store.areas.push({ id, nombre: d.nombre, color: d.color || '#8a929c', orden: store.areas.length + 1 }); persist(); return wait({ ok: true }); },
   updArea: (id, d) => { const a = store.areas.find((x) => x.id === Number(id)); if (a) Object.assign(a, Object.fromEntries(Object.entries(d).filter(([, v]) => v != null))); persist(); return wait(a); },
@@ -242,7 +262,7 @@ export const demoApi = {
   addRejectReason: (d) => { store.rejectReasons = store.rejectReasons || []; const texto = (d.texto || '').trim(); if (texto && !store.rejectReasons.find((r) => r.texto.toLowerCase() === texto.toLowerCase())) store.rejectReasons.push({ id: iid(), texto, orden: store.rejectReasons.length }); persist(); return wait({ ok: true }); },
   updRejectReason: (id, d) => { const r = (store.rejectReasons || []).find((x) => x.id === Number(id)); if (r) { if (d.texto != null) r.texto = d.texto; if (d.orden != null) r.orden = Number(d.orden); } persist(); return wait(r); },
   delRejectReason: (id) => { store.rejectReasons = (store.rejectReasons || []).filter((x) => x.id !== Number(id)); persist(); return wait({ ok: true }); },
-  okrGet: (anio) => { ensureOkr(); const a = Number(anio) || 2026; return wait({ anio: a, objectives: okrTreeDemo(a) }); },
+  okrGet: (anio) => { ensureOkr(); const a = Number(anio) || 2026; const unassigned = store.okrAOs.filter((x) => x.anio === a && !x.objective_id).map((x) => { const ar = store.areas.find((z) => z.id === x.area_id) || {}; return { id: x.id, titulo: x.titulo, trimestre: x.trimestre, area_id: x.area_id, area_nombre: ar.nombre, area_color: ar.color }; }); return wait({ anio: a, objectives: okrTreeDemo(a), unassigned }); },
   okrAddObjective: (d) => { ensureOkr(); store.okrObjectives.push({ id: iid(), anio: Number(d.anio) || 2026, titulo: d.titulo || 'Nuevo objetivo', prioridad: d.prioridad || 'media', orden: store.okrObjectives.length }); persist(); return wait({ ok: true }); },
   okrUpdObjective: (id, d) => { ensureOkr(); const o = store.okrObjectives.find((x) => x.id === Number(id)); if (o) { if (d.titulo != null) o.titulo = d.titulo; if (d.prioridad != null) o.prioridad = d.prioridad; } persist(); return wait(o); },
   okrDelObjective: (id) => { ensureOkr(); store.okrObjectives = store.okrObjectives.filter((x) => x.id !== Number(id)); store.okrKrs = store.okrKrs.filter((k) => k.objective_id !== Number(id)); persist(); return wait({ ok: true }); },
@@ -251,10 +271,12 @@ export const demoApi = {
   okrDelKr: (id) => { ensureOkr(); store.okrKrs = store.okrKrs.filter((x) => x.id !== Number(id)); store.okrAOs = store.okrAOs.filter((a) => a.kr_id !== Number(id)); persist(); return wait({ ok: true }); },
   okrAddAO: (d) => { ensureOkr(); const u = me(); const areaId = u.rol === 'admin' ? (d.area_id ? Number(d.area_id) : null) : u.area_id; store.okrAOs.push({ id: iid(), objective_id: d.objective_id ? Number(d.objective_id) : null, area_id: areaId, anio: Number(d.anio) || 2026, trimestre: Number(d.trimestre) || 1, titulo: d.titulo || '', meta: Number(d.meta) || 5, prioridad: d.prioridad || 'media', detalle: null, colab_areas: [], orden: store.okrAOs.length, created_at: new Date().toISOString() }); persist(); return wait({ ok: true }); },
   okrUpdAO: (id, d) => { ensureOkr(); const a = store.okrAOs.find((x) => x.id === Number(id)); if (a) { ['titulo', 'area_id', 'trimestre', 'meta', 'objective_id', 'anio'].forEach((f) => { if (d[f] != null) a[f] = f === 'titulo' ? d[f] : Number(d[f]); }); if ('colab_areas' in d) a.colab_areas = d.colab_areas; if (d.prioridad != null) a.prioridad = d.prioridad; if ('detalle' in d) a.detalle = d.detalle; } persist(); return wait(a); },
-  okrMyPlan: (anio, asof) => { ensureOkr(); const a = me().area_id; const yr = Number(anio) || 2026; const lim = asof ? asof + 'T23:59:59' : null; const okDate = (o) => !lim || !o.created_at || o.created_at <= lim; const objs = store.okrAOs.filter((x) => x.area_id === a && x.anio === yr && okDate(x)).map((x) => ({ ...x, colab_areas: x.colab_areas || [], colabs: (store.okrColabs || []).filter((c) => c.area_objective_id === x.id), metas: (store.okrMetas || []).filter((m) => m.area_objective_id === x.id && okDate(m)).sort((p, r) => (p.orden || 0) - (r.orden || 0)) })); return wait({ anio: yr, area_id: a, objectives: objs }); },
+  visibleUsers: () => { const m0 = me(); const areasOf = (u) => (u.area_ids && u.area_ids.length ? u.area_ids : (u.area_id != null ? [u.area_id] : [])); const mine = areasOf(m0); const canSee = (u) => m0.rol === 'admin' || u.reporta_a === m0.id || areasOf(u).some((x) => mine.includes(x)); return wait(store.users.filter((u) => u.activo && u.id !== m0.id && canSee(u)).map((u) => ({ id: u.id, nombre: u.nombre, area_id: u.area_id, rel: u.reporta_a === m0.id ? 'reporte' : (m0.rol === 'admin' ? 'admin' : 'area') }))); },
+  okrMyPlan: (anio, asof, opts = {}) => { ensureOkr(); const m0 = me(); const areasOf = (u) => (u.area_ids && u.area_ids.length ? u.area_ids : (u.area_id != null ? [u.area_id] : [])); const targetId = opts.user ? Number(opts.user) : m0.id; const isSelf = targetId === m0.id; const t = store.users.find((x) => x.id === targetId) || m0; const canSee = isSelf || m0.rol === 'admin' || t.reporta_a === m0.id || areasOf(t).some((x) => areasOf(m0).includes(x)); if (!canSee) return wait({ anio: Number(anio) || 2026, readonly: true, viewing: null, areas: [], objectives: [] }); const areas = areasOf(t); const onlyArea = opts.area ? Number(opts.area) : null; const yr = Number(anio) || 2026; const lim = asof ? asof + 'T23:59:59' : null; const okDate = (o) => !lim || !o.created_at || o.created_at <= lim; const objs = store.okrAOs.filter((x) => areas.includes(x.area_id) && x.anio === yr && okDate(x) && (!onlyArea || x.area_id === onlyArea)).map((x) => ({ ...x, colab_areas: x.colab_areas || [], can_edit: isSelf, colabs: (store.okrColabs || []).filter((c) => c.area_objective_id === x.id), metas: (store.okrMetas || []).filter((m) => m.area_objective_id === x.id && okDate(m)).sort((p, r) => (p.orden || 0) - (r.orden || 0)) })); const areaRows = areas.map((id) => store.areas.find((aa) => aa.id === id)).filter(Boolean).map((aa) => ({ id: aa.id, nombre: aa.nombre })); return wait({ anio: yr, readonly: !isSelf, viewing: { id: t.id, nombre: t.nombre }, areas: areaRows, area_id: m0.area_id, objectives: objs }); },
   okrColabMine: (anio) => { ensureOkr(); const a = me().area_id; const yr = Number(anio) || 2026; return wait((store.okrColabs || []).filter((c) => c.area_id === a).map((c) => { const ao = store.okrAOs.find((x) => x.id === c.area_objective_id) || {}; return { c, ao }; }).filter(({ ao }) => ao.anio === yr).map(({ c, ao }) => ({ id: c.id, pedido: c.pedido, estado: c.estado, motivo: c.motivo, objetivo: ao.titulo, trimestre: ao.trimestre, owner_area_id: ao.area_id }))); },
   okrColabAgenda: () => { ensureOkr(); const a = me().area_id; return wait((store.okrColabs || []).filter((c) => c.area_id === a && c.estado === 'tomado').map((c) => { const ao = store.okrAOs.find((x) => x.id === c.area_objective_id) || {}; const vences = (store.okrMetas || []).filter((m) => m.area_objective_id === ao.id && m.vence && !m.hecho).map((m) => m.vence).sort(); return { id: c.id, pedido: c.pedido, estado: c.estado, objetivo: ao.titulo, owner_area_nombre: (store.areas.find((x) => x.id === ao.area_id) || {}).nombre, vence: vences[0] || null }; }).sort((p, r) => (p.vence || '9999-99-99').localeCompare(r.vence || '9999-99-99'))); },
   okrColabRejected: () => { ensureOkr(); const a = me().area_id; return wait((store.okrColabs || []).filter((c) => c.estado === 'rechazado').map((c) => { const ao = store.okrAOs.find((x) => x.id === c.area_objective_id) || {}; return { c, ao }; }).filter(({ ao }) => ao.area_id === a).map(({ c, ao }) => ({ id: c.id, pedido: c.pedido, motivo: c.motivo, by_area_id: c.area_id, objetivo: ao.titulo, trimestre: ao.trimestre }))); },
+  okrRejectionsAll: () => { ensureOkr(); const m0 = me(); const dgIds = store.areas.filter((a) => /direc.*general/i.test(a.nombre || '')).map((a) => a.id); const isDG = m0.rol === 'admin' || (m0.area_ids || [m0.area_id]).some((a) => dgIds.includes(a)); if (!isDG) return wait({ isDG: false, rejections: [] }); return wait({ isDG: true, rejections: (store.okrColabs || []).filter((c) => c.estado === 'rechazado').map((c) => { const ao = store.okrAOs.find((x) => x.id === c.area_objective_id) || {}; return { id: c.id, pedido: c.pedido, motivo: c.motivo, by_area_id: c.area_id, objetivo: ao.titulo, trimestre: ao.trimestre, owner_area_id: ao.area_id }; }) }); },
   okrColabAdd: (d) => { ensureOkr(); store.okrColabs = store.okrColabs || []; const ex = store.okrColabs.find((c) => c.area_objective_id === Number(d.area_objective_id) && c.area_id === Number(d.area_id)); if (ex) { if (d.pedido != null) ex.pedido = d.pedido; } else store.okrColabs.push({ id: iid(), area_objective_id: Number(d.area_objective_id), area_id: Number(d.area_id), pedido: d.pedido || '', estado: 'pendiente' }); persist(); return wait({ ok: true }); },
   okrColabUpd: (id, d) => { ensureOkr(); const c = (store.okrColabs || []).find((x) => x.id === Number(id)); if (c) { if (d.pedido != null) c.pedido = d.pedido; const reassign = d.area_id != null && Number(d.area_id) !== c.area_id; if (reassign) { c.area_id = Number(d.area_id); c.estado = 'pendiente'; c.motivo = null; } else { if (d.estado != null) c.estado = d.estado; if (d.motivo !== undefined) c.motivo = d.motivo; } } persist(); return wait(c); },
   okrColabDel: (id) => { ensureOkr(); store.okrColabs = (store.okrColabs || []).filter((x) => x.id !== Number(id)); persist(); return wait({ ok: true }); },
@@ -262,16 +284,16 @@ export const demoApi = {
   teamAdd: (d) => { ensureOkr(); store.teamMembers = store.teamMembers || []; const a = me().area_id; let nombre = (d.nombre || '').trim(); const uid = d.user_id ? Number(d.user_id) : null; if (uid && !nombre) nombre = (store.users.find((x) => x.id === uid) || {}).nombre || ''; store.teamMembers.push({ id: iid(), area_id: a, nombre, user_id: uid }); persist(); return wait({ ok: true }); },
   teamUpd: (id, d) => { ensureOkr(); const m = (store.teamMembers || []).find((x) => x.id === Number(id)); if (m) { if (d.nombre != null) m.nombre = d.nombre; if ('user_id' in d) m.user_id = d.user_id ? Number(d.user_id) : null; } persist(); return wait(m); },
   teamDel: (id) => { ensureOkr(); store.teamMembers = (store.teamMembers || []).filter((x) => x.id !== Number(id)); (store.workTasks || []).forEach((w) => { if (w.member_id === Number(id)) w.member_id = null; }); persist(); return wait({ ok: true }); },
-  workGet: () => { ensureOkr(); const a = me().area_id; return wait((store.workTasks || []).filter((w) => w.area_id === a).map((w) => ({ ...w, objetivo: (store.okrAOs.find((o) => o.id === w.area_objective_id) || {}).titulo }))); },
-  workMine: () => { ensureOkr(); const uid = me().id; const mem = (store.teamMembers || []).filter((m) => m.user_id === uid).map((m) => m.id); return wait((store.workTasks || []).filter((w) => mem.includes(w.member_id)).map((w) => ({ ...w, objetivo: (store.okrAOs.find((o) => o.id === w.area_objective_id) || {}).titulo, area_nombre: (store.areas.find((a) => a.id === w.area_id) || {}).nombre }))); },
-  workAdd: (d) => { ensureOkr(); store.workTasks = store.workTasks || []; const a = me().area_id; store.workTasks.push({ id: iid(), area_id: a, member_id: d.member_id ? Number(d.member_id) : null, area_objective_id: d.area_objective_id ? Number(d.area_objective_id) : null, texto: d.texto || '', avance: 0, vence: d.vence || null }); persist(); return wait({ ok: true }); },
-  workUpd: (id, d) => { ensureOkr(); const w = (store.workTasks || []).find((x) => x.id === Number(id)); if (w) { if (d.texto != null) w.texto = d.texto; if (d.avance != null) w.avance = Math.max(0, Math.min(100, +d.avance)); if ('member_id' in d) w.member_id = d.member_id ? Number(d.member_id) : null; if ('area_objective_id' in d) w.area_objective_id = d.area_objective_id ? Number(d.area_objective_id) : null; if ('vence' in d) w.vence = d.vence || null; } persist(); return wait(w); },
+  workGet: () => { ensureOkr(); const a = me().area_id; return wait((store.workTasks || []).filter((w) => w.area_id === a).map((w) => ({ ...w, estado: estadoW(w), objetivo: (store.okrAOs.find((o) => o.id === w.area_objective_id) || {}).titulo }))); },
+  workMine: () => { ensureOkr(); const uid = me().id; const mem = (store.teamMembers || []).filter((m) => m.user_id === uid).map((m) => m.id); return wait((store.workTasks || []).filter((w) => mem.includes(w.member_id)).map((w) => ({ ...w, estado: estadoW(w), objetivo: (store.okrAOs.find((o) => o.id === w.area_objective_id) || {}).titulo, area_nombre: (store.areas.find((a) => a.id === w.area_id) || {}).nombre }))); },
+  workAdd: (d) => { ensureOkr(); store.workTasks = store.workTasks || []; const a = me().area_id; store.workTasks.push({ id: iid(), area_id: a, member_id: d.member_id ? Number(d.member_id) : null, area_objective_id: d.area_objective_id ? Number(d.area_objective_id) : null, texto: d.texto || '', avance: 0, estado: 'pendiente', vence: d.vence || null }); persist(); return wait({ ok: true }); },
+  workUpd: (id, d) => { ensureOkr(); const w = (store.workTasks || []).find((x) => x.id === Number(id)); if (w) { if (d.texto != null) w.texto = d.texto; if (d.avance != null) { w.avance = Math.max(0, Math.min(100, +d.avance)); if (w.avance >= 100) w.estado = 'hecha'; } if ('estado' in d && d.estado) w.estado = d.estado; if ('member_id' in d) w.member_id = d.member_id ? Number(d.member_id) : null; if ('area_objective_id' in d) w.area_objective_id = d.area_objective_id ? Number(d.area_objective_id) : null; if ('vence' in d) w.vence = d.vence || null; } persist(); return wait(w); },
   workDel: (id) => { ensureOkr(); store.workTasks = (store.workTasks || []).filter((x) => x.id !== Number(id)); persist(); return wait({ ok: true }); },
   okrMetaAdd: (d) => { ensureOkr(); store.okrMetas = store.okrMetas || []; store.okrMetas.push({ id: iid(), area_objective_id: Number(d.area_objective_id), titulo: d.titulo || '', hecho: false, avance: 0, orden: store.okrMetas.length, created_at: new Date().toISOString() }); persist(); return wait({ ok: true }); },
   okrMetaUpd: (id, d) => { ensureOkr(); const m = (store.okrMetas || []).find((x) => x.id === Number(id)); if (m) { if (d.titulo != null) m.titulo = d.titulo; if ('vence' in d) m.vence = d.vence || null; if (d.avance != null) { m.avance = Math.max(0, Math.min(100, +d.avance)); m.hecho = m.avance >= 100; } else if (d.hecho != null) { m.hecho = !!d.hecho; m.avance = m.hecho ? 100 : 0; } } persist(); return wait(m); },
   okrMetaDel: (id) => { ensureOkr(); store.okrMetas = (store.okrMetas || []).filter((x) => x.id !== Number(id)); persist(); return wait({ ok: true }); },
   okrMetaReorder: (aoId, ids) => { ensureOkr(); (ids || []).forEach((id, i) => { const m = (store.okrMetas || []).find((x) => x.id === Number(id)); if (m) m.orden = i; }); persist(); return wait({ ok: true }); },
-  okrMyMetas: () => { ensureOkr(); const a = me().area_id; const aoIds = store.okrAOs.filter((x) => x.area_id === a).map((x) => x.id); return wait((store.okrMetas || []).filter((m) => aoIds.includes(m.area_objective_id) && m.vence && !m.hecho).map((m) => ({ id: m.id, titulo: m.titulo, vence: m.vence, hecho: m.hecho, objetivo: (store.okrAOs.find((x) => x.id === m.area_objective_id) || {}).titulo }))); },
+  okrMyMetas: () => { ensureOkr(); const a = me().area_id; const aoIds = store.okrAOs.filter((x) => x.area_id === a).map((x) => x.id); return wait((store.okrMetas || []).filter((m) => aoIds.includes(m.area_objective_id) && m.vence && !m.hecho).map((m) => ({ id: m.id, titulo: m.titulo, vence: m.vence, hecho: m.hecho, area_objective_id: m.area_objective_id, objetivo: (store.okrAOs.find((x) => x.id === m.area_objective_id) || {}).titulo }))); },
   okrDelAO: (id) => { ensureOkr(); store.okrAOs = store.okrAOs.filter((x) => x.id !== Number(id)); persist(); return wait({ ok: true }); },
   okrMine: () => { ensureOkr(); const u = me(); return wait(store.okrAOs.filter((a) => a.area_id === u.area_id).map((a) => ({ id: a.id, titulo: a.titulo, trimestre: a.trimestre, obj_titulo: (store.okrObjectives.find((o) => o.id === a.objective_id) || {}).titulo }))); },
   okrSettings: () => { ensureOkr(); return wait({ umbral: store.umbral ?? 70 }); },

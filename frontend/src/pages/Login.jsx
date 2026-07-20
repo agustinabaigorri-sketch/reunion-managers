@@ -15,6 +15,9 @@ export default function Login({ onLogin }) {
   // modo real
   const [email, setEmail] = useState('');
   const [pass, setPass] = useState('');
+  const [mode, setMode] = useState('login');   // 'login' | 'change'
+  const [nueva, setNueva] = useState('');
+  const [okMsg, setOkMsg] = useState(null);
   // modo demo
   const demoUsers = DEMO ? demoListUsers() : [];
   const [demoUid, setDemoUid] = useState(demoUsers[0]?.id);
@@ -58,25 +61,52 @@ export default function Login({ onLogin }) {
     }
   };
 
+  const changeSubmit = async (e) => {
+    e.preventDefault();
+    setBusy(true); setErr(null); setOkMsg(null);
+    try {
+      await api.changePasswordAtLogin(email.trim(), pass, nueva);
+      setMode('login'); setPass(''); setNueva('');
+      setOkMsg('Contraseña actualizada ✓ — entrá con la nueva.');
+    } catch (e2) {
+      setErr(e2.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const change = mode === 'change';
   return (
     <div style={wrap}>
-      <form style={card} onSubmit={submit}>
+      <form style={card} onSubmit={change ? changeSubmit : submit}>
         <Logo size={34} />
         <h2 style={{ marginTop: 18 }}>Reunión semanal de managers</h2>
-        <p className="sub" style={{ marginBottom: 22 }}>Ingresá con tu email y contraseña</p>
+        <p className="sub" style={{ marginBottom: 22 }}>{change ? 'Cambiá tu contraseña' : 'Ingresá con tu email y contraseña'}</p>
         <input
           type="email" placeholder="email" value={email} autoComplete="username"
           onChange={(e) => setEmail(e.target.value)} style={{ width: '100%', marginBottom: 10 }}
         />
         <input
-          type="password" placeholder="contraseña" value={pass} autoComplete="current-password"
-          onChange={(e) => setPass(e.target.value)} style={{ width: '100%', marginBottom: 16 }}
+          type="password" placeholder={change ? 'contraseña actual' : 'contraseña'} value={pass} autoComplete="current-password"
+          onChange={(e) => setPass(e.target.value)} style={{ width: '100%', marginBottom: change ? 10 : 16 }}
         />
+        {change && (
+          <input
+            type="password" placeholder="contraseña nueva (mín. 6)" value={nueva} autoComplete="new-password"
+            onChange={(e) => setNueva(e.target.value)} style={{ width: '100%', marginBottom: 16 }}
+          />
+        )}
         <button className="btn btn-primary" type="submit" disabled={busy} style={{ width: '100%', justifyContent: 'center' }}>
-          {busy ? 'Entrando…' : 'Entrar'}
+          {busy ? (change ? 'Guardando…' : 'Entrando…') : (change ? 'Guardar contraseña' : 'Entrar')}
         </button>
         {err && <p style={{ color: 'var(--red)', fontSize: 13, marginTop: 16 }}>{err}</p>}
-        <p className="small muted" style={{ marginTop: 16 }}>¿No tenés acceso? Pedíle al administrador que te cree el usuario.</p>
+        {okMsg && <p style={{ color: 'var(--eb-green-d, #1a7a4a)', fontSize: 13, marginTop: 16 }}>{okMsg}</p>}
+        <p className="small muted" style={{ marginTop: 16 }}>
+          {change
+            ? <a onClick={() => { setMode('login'); setErr(null); }} style={{ cursor: 'pointer', color: '#1F86D6' }}>← volver a entrar</a>
+            : <a onClick={() => { setMode('change'); setErr(null); setOkMsg(null); }} style={{ cursor: 'pointer', color: '#1F86D6' }}>Cambiar mi contraseña</a>}
+        </p>
+        {!change && <p className="small muted" style={{ marginTop: 8 }}>¿No tenés acceso? Pedíle al administrador que te cree el usuario.</p>}
       </form>
     </div>
   );
