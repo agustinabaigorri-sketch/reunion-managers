@@ -216,6 +216,51 @@ Así se validó la migración 020.
 
 ---
 
+## 8.bis Consultar la base desde el agente (MCP read-only)
+
+Existe un paquete listo para **consultar la base en lenguaje natural desde Claude Code**, en
+**solo lectura**: `reunion-managers-db.zip` (queda en la carpeta del proyecto, **no** se commitea).
+
+Contiene: `setup.sh`, `SKILL.md` + `schema.md` (contexto de la base para el agente),
+`tools-readonly.json` y `credenciales.env.example`.
+
+### Qué hace el instalador
+1. Copia la skill a `~/.claude/skills/reunion-managers-db/`.
+2. Registra un MCP llamado `reunion-db` en **scope user**:
+   `npx -y @henkey/postgres-mcp-server --connection-string "<URL>" --tools-config <tools-readonly.json>`
+
+### Doble candado de seguridad
+1. El rol de base **`mcp_readonly` ya existe en producción** con **solo `SELECT`** sobre todas
+   las tablas, y permisos **por columna** en `users` para **no exponer `password_hash`**.
+2. `tools-readonly.json` limita el MCP a tools de lectura (`pg_execute_query`,
+   `pg_analyze_database`, `pg_monitor_database`, `pg_debug_database`). Las de escritura ni aparecen.
+
+### Instalar (en la cuenta/máquina nueva)
+```bash
+cd reunion-managers-db
+bash setup.sh          # pide la connection string y la deja embebida
+# reiniciar Claude Code
+```
+Formato de la credencial:
+`postgresql://mcp_readonly:<password>@trolley.proxy.rlwy.net:50233/railway`
+(`trolley.proxy.rlwy.net:50233` es el **proxy público** del Postgres de Railway; el host interno
+`postgres.railway.internal` **no resuelve** fuera de Railway.)
+
+> ⚠️ **La contraseña de `mcp_readonly` no está en ningún lado de este repo ni se puede recuperar**
+> (Postgres la guarda hasheada). Si se perdió, hay que **rotarla** desde una conexión admin:
+> ```sql
+> ALTER ROLE mcp_readonly WITH PASSWORD '<nueva>';
+> ```
+> Ojo: rotarla **invalida la credencial de cualquier otra persona** que ya la tenga configurada.
+
+### Desinstalar
+```bash
+claude mcp remove reunion-db --scope user
+rm -rf ~/.claude/skills/reunion-managers-db
+```
+
+---
+
 ## 9. Pendientes / backlog
 
 **Definido y validado, falta construir:**

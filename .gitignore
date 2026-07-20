@@ -3,3 +3,7 @@ node_modules/
 dist/
 *.log
 .DS_Store
+
+# Paquete del MCP y credenciales locales (nunca al repo)
+*.zip
+credenciales.env
