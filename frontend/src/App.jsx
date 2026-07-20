@@ -10,6 +10,7 @@ import Planificacion from './pages/Planificacion.jsx';
 import MiPlanificacion from './pages/MiPlanificacion.jsx';
 import ModoTrabajo from './pages/ModoTrabajo.jsx';
 import MisTareas from './pages/MisTareas.jsx';
+import Historial from './pages/Historial.jsx';
 import ChangePassword from './ChangePassword.jsx';
 
 export default function App() {
@@ -45,10 +46,12 @@ export default function App() {
 
   const isAdmin = boot.me.rol === 'admin';
   const isColab = boot.me.rol === 'colaborador';
+  const isDir = !!boot.me.esDireccion;   // admin o Dirección General
   // El colaborador (no-manager) solo ve "Mi trabajo"; el resto ve todo.
   const tabs = isColab
     ? [['trabajo', 'Mi trabajo']]
     : [['carga', 'Mi semana'], ['reunion', 'Vista reunión'], ['miplan', 'Mi planificación'], ['trabajo', 'Modo trabajo'], ['tareas', 'Mis tareas']];
+  if (!isColab && isDir) tabs.push(['metricas', 'Métricas'], ['historial', 'Historial']);
   if (isAdmin) tabs.push(['okr', 'Planificación empresa'], ['admin', 'Administración']);
   const curView = isColab ? 'trabajo' : view;
   const logout = () => {
@@ -100,7 +103,8 @@ export default function App() {
       <main>
         {curView === 'carga' && <Semana boot={boot} week={selected.id} weekObj={selected} />}
         {curView === 'reunion' && <Reunion boot={boot} week={selected.id} />}
-        {curView === 'metricas' && <Metricas boot={boot} week={selected.id} />}
+        {curView === 'metricas' && isDir && <Metricas boot={boot} week={selected.id} />}
+        {curView === 'historial' && isDir && <Historial boot={boot} />}
         {curView === 'tareas' && <MisTareas />}
         {curView === 'miplan' && <MiPlanificacion boot={boot} />}
         {curView === 'trabajo' && <ModoTrabajo boot={boot} />}

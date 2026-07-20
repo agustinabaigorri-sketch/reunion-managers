@@ -60,6 +60,7 @@ const realApi = {
   okrDelAO: (id) => req('DELETE', '/okr/area-objectives/' + id),
   okrMine: () => req('GET', '/okr/area-objectives/mine'),
   visibleUsers: () => req('GET', '/visible-users'),
+  audit: (o = {}) => { const p = new URLSearchParams(); if (o.entidad) p.set('entidad', o.entidad); if (o.user) p.set('user', o.user); if (o.limit) p.set('limit', o.limit); const qs = p.toString(); return req('GET', '/audit' + (qs ? '?' + qs : '')); },
   okrMyPlan: (anio, asof, opts = {}) => { const p = new URLSearchParams(); if (anio) p.set('anio', anio); if (asof) p.set('asof', asof); if (opts.user) p.set('user', opts.user); if (opts.area) p.set('area', opts.area); const qs = p.toString(); return req('GET', '/okr/my-plan' + (qs ? '?' + qs : '')); },
   okrColabMine: (anio) => req('GET', '/okr/colab/mine' + (anio ? '?anio=' + anio : '')),
   okrColabAgenda: () => req('GET', '/okr/colab/agenda'),

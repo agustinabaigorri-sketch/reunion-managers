@@ -204,6 +204,7 @@ export const demoApi = {
   login: () => wait({ token: 'demo', user: me() }),
   changePassword: () => wait({ ok: true }),
   changePasswordAtLogin: () => wait({ ok: true }),
+  audit: () => wait(store.audit || []),
   bootstrap: () => wait({ me: me(), areas: store.areas, users: store.users, tags: store.tags, weeks: [...store.weeks].reverse(), rejectReasons: store.rejectReasons || [], currentWeek: weekById(CURRENT) }),
   resolveWeek: ({ offset = 0, date } = {}) => {
     if (date) return wait(store.weeks.find((w) => date >= w.fecha_inicio && date <= w.fecha_fin) || weekById(CURRENT));

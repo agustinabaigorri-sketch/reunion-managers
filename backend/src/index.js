@@ -43,6 +43,26 @@ async function loadCarry(entryId) {
 const matTipo = (srcTipo) => (srcTipo === 'bloqueo' ? 'bloqueo' : 'en_curso');
 const isOpenCarry = (st) => st !== 'resuelto' && st !== 'cancelado' && st !== 'pausado';
 
+// ---------- historial de cambios (auditoría) ----------
+async function logAudit(userId, e) {
+  try {
+    await q(
+      `insert into audit_log(user_id,entidad,entidad_id,titulo,accion,campo,antes,despues,contexto)
+       values($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+      [userId || null, e.entidad, e.entidadId || null, e.titulo || null, e.accion,
+       e.campo || null, e.antes == null ? null : String(e.antes), e.despues == null ? null : String(e.despues), e.contexto || null]);
+  } catch (err) { console.error('audit', err.message); }   // nunca romper la operación por el log
+}
+// Registra un cambio por cada campo que efectivamente cambió.
+async function logDiff(userId, { entidad, entidadId, titulo, contexto }, antes, despues, campos) {
+  for (const [campo, label] of Object.entries(campos)) {
+    const a = antes?.[campo], d = despues?.[campo];
+    const norm = (v) => (v == null ? '' : String(v));
+    if (norm(a) === norm(d)) continue;
+    await logAudit(userId, { entidad, entidadId, titulo, accion: 'edito', campo: label, antes: a, despues: d, contexto });
+  }
+}
+
 // Normaliza el texto para deduplicar arrastres (ignora may/espacios).
 const carryKey = (c) => 't' + ((c.texto || '').trim().toLowerCase());
 // Genera la lista de compromisos / en curso / trabados abiertos de la semana anterior.
@@ -124,8 +144,48 @@ async function getEntryData(userId, week, { persist = true } = {}) {
   return { id: entry.id, submitted: entry.submitted, items, carry };
 }
 
+const TIPO_LABEL = { logro: 'Logro', en_curso: 'En curso', bloqueo: 'Trabado', proximo: 'Compromiso' };
+const nz = (s) => (s || '').trim().toLowerCase();
+// Compara la semana guardada contra la anterior y registra altas, bajas y cambios.
+async function auditEntryDiff(userId, entryId, weekId, body, prevItems, prevCarry) {
+  const wk = (await q('select fecha_inicio, fecha_fin from weeks where id=$1', [weekId])).rows[0];
+  const ctx = wk ? `semana ${wk.fecha_inicio} → ${wk.fecha_fin}` : null;
+  const aoTitulo = async (id) => (id == null ? '—' : ((await q('select titulo from okr_area_objectives where id=$1', [id])).rows[0]?.titulo || String(id)));
+  const areaNom = async (id) => (id == null ? '—' : ((await q('select nombre from areas where id=$1', [id])).rows[0]?.nombre || String(id)));
+  const prevMap = new Map(); prevItems.filter((i) => nz(i.texto)).forEach((i) => prevMap.set(nz(i.texto), i));
+  const newMap = new Map(); (body.items || []).filter((i) => nz(i.texto)).forEach((i) => newMap.set(nz(i.texto), i));
+  for (const [k, it] of newMap) {
+    if (prevMap.has(k)) continue;
+    await logAudit(userId, { entidad: 'item_semana', entidadId: entryId, titulo: it.texto, accion: 'creo', campo: TIPO_LABEL[it.tipo] || it.tipo, contexto: ctx });
+  }
+  for (const [k, it] of prevMap) {
+    if (newMap.has(k)) continue;
+    await logAudit(userId, { entidad: 'item_semana', entidadId: entryId, titulo: it.texto, accion: 'elimino', campo: TIPO_LABEL[it.tipo] || it.tipo, contexto: ctx });
+  }
+  for (const [k, it] of newMap) {
+    const p = prevMap.get(k);
+    if (!p) continue;
+    if (p.tipo !== it.tipo) await logAudit(userId, { entidad: 'item_semana', entidadId: entryId, titulo: it.texto, accion: 'edito', campo: 'estado', antes: TIPO_LABEL[p.tipo] || p.tipo, despues: TIPO_LABEL[it.tipo] || it.tipo, contexto: ctx });
+    if ((p.area_objective_id ?? null) !== (it.areaObjectiveId ?? null)) {
+      await logAudit(userId, { entidad: 'item_semana', entidadId: entryId, titulo: it.texto, accion: 'edito', campo: 'objetivo vinculado', antes: await aoTitulo(p.area_objective_id), despues: await aoTitulo(it.areaObjectiveId), contexto: ctx });
+    }
+    if ((p.necesita_de_area_id ?? null) !== (it.necesitaDe ?? null)) {
+      await logAudit(userId, { entidad: 'item_semana', entidadId: entryId, titulo: it.texto, accion: 'edito', campo: 'ayuda de área', antes: await areaNom(p.necesita_de_area_id), despues: await areaNom(it.necesitaDe), contexto: ctx });
+    }
+  }
+  // Marcas del panel de revisión (resuelto / sigue / se cayó…)
+  const pc = new Map(); prevCarry.filter((r) => nz(r.texto)).forEach((r) => pc.set(nz(r.texto), r.status));
+  for (const cr of body.carry || []) {
+    if (!nz(cr.texto)) continue;
+    const antes = pc.get(nz(cr.texto));
+    if (antes === undefined || antes === (cr.status || 'pendiente')) continue;
+    await logAudit(userId, { entidad: 'item_semana', entidadId: entryId, titulo: cr.texto, accion: 'marco', campo: 'cómo quedó', antes, despues: cr.status || 'pendiente', contexto: ctx });
+  }
+}
+
 async function saveEntry(userId, weekId, body) {
   const c = await pool.connect();
+  let entryIdOut = null, prevItems = [], prevCarry = [];
   try {
     await c.query('begin');
     const { rows } = await c.query(
@@ -135,6 +195,10 @@ async function saveEntry(userId, weekId, body) {
       [userId, weekId, !!body.submitted]
     );
     const entryId = rows[0].id;
+    entryIdOut = entryId;
+    // Foto previa para el historial de cambios (se compara después del commit).
+    prevItems = (await c.query(`select tipo, texto, area_objective_id, necesita_de_area_id from items where entry_id=$1`, [entryId])).rows;
+    prevCarry = (await c.query(`select texto, status from carry where entry_id=$1`, [entryId])).rows;
     await c.query(`delete from items where entry_id=$1`, [entryId]);
     await c.query(`delete from carry where entry_id=$1`, [entryId]);
     for (const [i, it] of (body.items || []).entries()) {
@@ -159,6 +223,8 @@ async function saveEntry(userId, weekId, body) {
       );
     }
     await c.query('commit');
+    // Fuera de la transacción: el historial nunca debe frenar el guardado.
+    auditEntryDiff(userId, entryIdOut, weekId, body, prevItems, prevCarry).catch((err) => console.error('audit entry', err.message));
   } catch (e) {
     await c.query('rollback');
     throw e;
@@ -217,7 +283,8 @@ app.get('/bootstrap', auth, wrap(async (req, res) => {
   const byUser = {};
   for (const r of uareas.rows) (byUser[r.user_id] = byUser[r.user_id] || []).push(r.area_id);
   const usersOut = users.rows.map((u) => ({ ...u, area_ids: byUser[u.id] || (u.area_id != null ? [u.area_id] : []) }));
-  res.json({ me: req.user, areas: areas.rows, users: usersOut, tags: tags.rows, weeks: weeks.rows, rejectReasons: rejectReasons.rows, currentWeek: current });
+  const dg = await esDireccion(req.user);
+  res.json({ me: { ...req.user, esDireccion: dg }, areas: areas.rows, users: usersOut, tags: tags.rows, weeks: weeks.rows, rejectReasons: rejectReasons.rows, currentWeek: current });
 }));
 
 app.get('/weeks/current', auth, wrap(async (req, res) => res.json(await getCurrentWeek())));
@@ -309,6 +376,32 @@ app.get('/alerts/me', auth, wrap(async (req, res) => {
 }));
 
 app.get('/tags', auth, wrap(async (req, res) => res.json((await q(`select * from tags order by name`)).rows)));
+
+// ¿Es admin o miembro de Dirección General? (habilita historial y métricas)
+async function esDireccion(user) {
+  if (user.rol === 'admin') return true;
+  const { rows } = await q(`select id from areas where lower(nombre) like '%direc%general%'`);
+  const ids = rows.map((r) => r.id);
+  return (user.area_ids || []).some((a) => ids.includes(a));
+}
+
+// Historial de cambios — solo admin / Dirección General.
+app.get('/audit', auth, wrap(async (req, res) => {
+  if (!(await esDireccion(req.user))) return res.status(403).json({ error: 'solo Dirección General o administradores' });
+  const limit = Math.min(500, Math.max(1, Number(req.query.limit) || 200));
+  const entidad = req.query.entidad || null;
+  const userId = req.query.user ? Number(req.query.user) : null;
+  const { rows } = await q(
+    `select a.*, u.nombre as user_nombre, ar.nombre as user_area
+     from audit_log a
+     left join users u on u.id = a.user_id
+     left join areas ar on ar.id = u.area_id
+     where ($1::text is null or a.entidad = $1)
+       and ($2::int is null or a.user_id = $2)
+     order by a.created_at desc limit $3`,
+    [entidad, userId, limit]);
+  res.json(rows);
+}));
 
 // ---------- administración ----------
 app.post('/admin/users', auth, requireAdmin, wrap(async (req, res) => {
@@ -424,14 +517,23 @@ app.get('/okr', auth, wrap(async (req, res) => {
 app.post('/okr/objectives', auth, requireAdmin, wrap(async (req, res) => {
   const { rows } = await q('insert into okr_objectives(anio,titulo,prioridad) values($1,$2,$3) returning *',
     [Number(req.body.anio) || new Date().getFullYear(), req.body.titulo || 'Nuevo objetivo', req.body.prioridad || 'media']);
+  await logAudit(req.user.id, { entidad: 'objetivo_empresa', entidadId: rows[0].id, titulo: rows[0].titulo, accion: 'creo', contexto: String(rows[0].anio) });
   res.json(rows[0]);
 }));
 app.patch('/okr/objectives/:id', auth, requireAdmin, wrap(async (req, res) => {
+  const { rows: prev } = await q('select * from okr_objectives where id=$1', [req.params.id]);
   const { rows } = await q('update okr_objectives set titulo=coalesce($2,titulo), prioridad=coalesce($3,prioridad) where id=$1 returning *',
     [req.params.id, req.body.titulo ?? null, req.body.prioridad ?? null]);
+  await logDiff(req.user.id, { entidad: 'objetivo_empresa', entidadId: rows[0].id, titulo: rows[0].titulo, contexto: String(rows[0].anio) },
+    prev[0], rows[0], { titulo: 'título', prioridad: 'prioridad' });
   res.json(rows[0]);
 }));
-app.delete('/okr/objectives/:id', auth, requireAdmin, wrap(async (req, res) => { await q('delete from okr_objectives where id=$1', [req.params.id]); res.json({ ok: true }); }));
+app.delete('/okr/objectives/:id', auth, requireAdmin, wrap(async (req, res) => {
+  const { rows: prev } = await q('select * from okr_objectives where id=$1', [req.params.id]);
+  await q('delete from okr_objectives where id=$1', [req.params.id]);
+  if (prev[0]) await logAudit(req.user.id, { entidad: 'objetivo_empresa', entidadId: prev[0].id, titulo: prev[0].titulo, accion: 'elimino', contexto: String(prev[0].anio) });
+  res.json({ ok: true });
+}));
 
 // --- objetivos de área ---
 // Membresía de área (multi-área): puede operar sobre cosas del área (crear, team, work).
@@ -477,6 +579,7 @@ app.post('/okr/area-objectives', auth, wrap(async (req, res) => {
   const { rows } = await q(
     'insert into okr_area_objectives(objective_id,area_id,anio,trimestre,titulo,meta,prioridad,owner_user_id) values($1,$2,$3,$4,$5,$6,$7,$8) returning *',
     [b.objective_id || null, areaId, Number(b.anio) || new Date().getFullYear(), b.trimestre || 1, b.titulo || '', b.meta || 5, b.prioridad || 'media', req.user.id]);
+  await logAudit(req.user.id, { entidad: 'objetivo_area', entidadId: rows[0].id, titulo: rows[0].titulo || '(sin título)', accion: 'creo', contexto: 'Q' + rows[0].trimestre + ' ' + rows[0].anio });
   res.json(rows[0]);
 }));
 app.patch('/okr/area-objectives/:id', auth, wrap(async (req, res) => {
@@ -494,6 +597,8 @@ app.patch('/okr/area-objectives/:id', auth, wrap(async (req, res) => {
        updated_at=now()
      where id=$1 returning *`,
     [req.params.id, b.titulo ?? null, b.objective_id ?? null, b.trimestre ?? null, b.meta ?? null, area, hasC, hasC ? b.colab_areas : null, b.prioridad ?? null, b.detalle ?? null, b.anio ?? null]);
+  await logDiff(req.user.id, { entidad: 'objetivo_area', entidadId: rows[0].id, titulo: rows[0].titulo, contexto: 'Q' + rows[0].trimestre + ' ' + rows[0].anio },
+    cur[0], rows[0], { titulo: 'título', trimestre: 'trimestre', anio: 'año', prioridad: 'prioridad', meta: 'meta', objective_id: 'objetivo de empresa', area_id: 'área' });
   res.json(rows[0]);
 }));
 app.delete('/okr/area-objectives/:id', auth, wrap(async (req, res) => {
@@ -501,6 +606,7 @@ app.delete('/okr/area-objectives/:id', auth, wrap(async (req, res) => {
   if (!cur[0]) return res.json({ ok: true });
   if (!canEditAO(req.user, cur[0])) return res.status(403).json({ error: 'este objetivo es de otra persona' });
   await q('delete from okr_area_objectives where id=$1', [req.params.id]);
+  await logAudit(req.user.id, { entidad: 'objetivo_area', entidadId: cur[0].id, titulo: cur[0].titulo || '(sin título)', accion: 'elimino', contexto: 'Q' + cur[0].trimestre + ' ' + cur[0].anio });
   res.json({ ok: true });
 }));
 
@@ -641,6 +747,10 @@ app.patch('/okr/colab/:id', auth, wrap(async (req, res) => {
        motivo = case when $4 then $5 else motivo end, area_id=coalesce($6,area_id)
      where id=$1 returning *`,
     [req.params.id, b.pedido ?? null, nuevoEstado, hasMotivo, nuevoMotivo, b.area_id ? Number(b.area_id) : null]);
+  const areaNom = async (id) => (id == null ? '' : ((await q('select nombre from areas where id=$1', [id])).rows[0]?.nombre || String(id)));
+  await logDiff(req.user.id, { entidad: 'colaboracion', entidadId: rows[0].id, titulo: rows[0].pedido || '(sin detalle)', contexto: 'objetivo: ' + (ao?.titulo || '') },
+    c, rows[0], { estado: 'estado', motivo: 'motivo', pedido: 'pedido' });
+  if (reassign) await logAudit(req.user.id, { entidad: 'colaboracion', entidadId: rows[0].id, titulo: rows[0].pedido || '(sin detalle)', accion: 'edito', campo: 'área asignada', antes: await areaNom(c.area_id), despues: await areaNom(rows[0].area_id), contexto: 'objetivo: ' + (ao?.titulo || '') });
   res.json(rows[0]);
 }));
 app.delete('/okr/colab/:id', auth, wrap(async (req, res) => {
@@ -657,6 +767,7 @@ app.post('/okr/metas', auth, wrap(async (req, res) => {
   if (!aoR[0]) return res.status(404).json({ error: 'objetivo no existe' });
   if (!canEditAO(req.user, aoR[0])) return res.status(403).json({ error: 'este objetivo es de otra persona' });
   const { rows } = await q('insert into okr_metas(area_objective_id,titulo) values($1,$2) returning *', [req.body.area_objective_id, req.body.titulo || '']);
+  await logAudit(req.user.id, { entidad: 'meta', entidadId: rows[0].id, titulo: rows[0].titulo || '(sin título)', accion: 'creo', contexto: 'objetivo: ' + (aoR[0].titulo || '') });
   res.json(rows[0]);
 }));
 app.patch('/okr/metas/:id', auth, wrap(async (req, res) => {
@@ -670,10 +781,13 @@ app.patch('/okr/metas/:id', auth, wrap(async (req, res) => {
   let hecho = b.hecho ?? null;
   if (hasAv) hecho = avance >= 100;
   else if (b.hecho != null) avance = b.hecho ? 100 : 0;
+  const { rows: prevM } = await q('select * from okr_metas where id=$1', [req.params.id]);
   const { rows } = await q(
     `update okr_metas set titulo=coalesce($2,titulo), hecho=coalesce($3,hecho), avance=coalesce($4,avance),
        vence = case when $5 then $6::date else vence end, updated_at=now() where id=$1 returning *`,
     [req.params.id, b.titulo ?? null, hecho, avance, hasV, hasV ? (b.vence || null) : null]);
+  await logDiff(req.user.id, { entidad: 'meta', entidadId: rows[0].id, titulo: rows[0].titulo, contexto: 'objetivo: ' + (ao.titulo || '') },
+    prevM[0], rows[0], { vence: 'fecha límite', titulo: 'título', avance: '% de avance', hecho: 'hecha' });
   res.json(rows[0]);
 }));
 
@@ -690,7 +804,9 @@ app.get('/okr/my-metas', auth, wrap(async (req, res) => {
 app.delete('/okr/metas/:id', auth, wrap(async (req, res) => {
   const ao = await aoOfMeta(req.params.id);
   if (ao && !canEditAO(req.user, ao)) return res.status(403).json({ error: 'este objetivo es de otra persona' });
+  const { rows: prevM } = await q('select * from okr_metas where id=$1', [req.params.id]);
   await q('delete from okr_metas where id=$1', [req.params.id]);
+  if (prevM[0]) await logAudit(req.user.id, { entidad: 'meta', entidadId: prevM[0].id, titulo: prevM[0].titulo || '(sin título)', accion: 'elimino', contexto: 'objetivo: ' + (ao?.titulo || '') });
   res.json({ ok: true });
 }));
 // Reordenar las metas de un objetivo (mano a mano o por fecha, según el orden de ids que llega).
