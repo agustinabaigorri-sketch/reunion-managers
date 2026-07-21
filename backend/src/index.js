@@ -29,6 +29,7 @@ async function loadItems(entryId, c = pool) {
   return rows.map((r) => ({
     id: r.id, tipo: r.tipo, texto: r.texto, estado: r.estado,
     necesitaDe: r.necesita_de_area_id, tags: r.tags, areaObjectiveId: r.area_objective_id,
+    fechaProy: r.fecha_proy, fechaReal: r.fecha_real,
   }));
 }
 
@@ -172,6 +173,8 @@ async function auditEntryDiff(userId, entryId, weekId, body, prevItems, prevCarr
     if ((p.necesita_de_area_id ?? null) !== (it.necesitaDe ?? null)) {
       await logAudit(userId, { entidad: 'item_semana', entidadId: entryId, titulo: it.texto, accion: 'edito', campo: 'ayuda de área', antes: await areaNom(p.necesita_de_area_id), despues: await areaNom(it.necesitaDe), contexto: ctx });
     }
+    if ((p.fecha_proy ?? null) !== (it.fechaProy ?? null)) await logAudit(userId, { entidad: 'item_semana', entidadId: entryId, titulo: it.texto, accion: 'edito', campo: 'fecha proyectada', antes: p.fecha_proy, despues: it.fechaProy, contexto: ctx });
+    if ((p.fecha_real ?? null) !== (it.fechaReal ?? null)) await logAudit(userId, { entidad: 'item_semana', entidadId: entryId, titulo: it.texto, accion: 'edito', campo: 'fecha realizada', antes: p.fecha_real, despues: it.fechaReal, contexto: ctx });
   }
   // Marcas del panel de revisión (resuelto / sigue / se cayó…)
   const pc = new Map(); prevCarry.filter((r) => nz(r.texto)).forEach((r) => pc.set(nz(r.texto), r.status));
@@ -197,14 +200,14 @@ async function saveEntry(userId, weekId, body) {
     const entryId = rows[0].id;
     entryIdOut = entryId;
     // Foto previa para el historial de cambios (se compara después del commit).
-    prevItems = (await c.query(`select tipo, texto, area_objective_id, necesita_de_area_id from items where entry_id=$1`, [entryId])).rows;
+    prevItems = (await c.query(`select tipo, texto, area_objective_id, necesita_de_area_id, fecha_proy, fecha_real from items where entry_id=$1`, [entryId])).rows;
     prevCarry = (await c.query(`select texto, status from carry where entry_id=$1`, [entryId])).rows;
     await c.query(`delete from items where entry_id=$1`, [entryId]);
     await c.query(`delete from carry where entry_id=$1`, [entryId]);
     for (const [i, it] of (body.items || []).entries()) {
       const { rows: ir } = await c.query(
-        `insert into items(entry_id,tipo,texto,estado,necesita_de_area_id,orden,area_objective_id) values($1,$2,$3,$4,$5,$6,$7) returning id`,
-        [entryId, it.tipo, it.texto || '', it.estado || (it.tipo === 'bloqueo' ? 'abierto' : 'na'), it.necesitaDe || null, i, it.areaObjectiveId || null]
+        `insert into items(entry_id,tipo,texto,estado,necesita_de_area_id,orden,area_objective_id,fecha_proy,fecha_real) values($1,$2,$3,$4,$5,$6,$7,$8,$9) returning id`,
+        [entryId, it.tipo, it.texto || '', it.estado || (it.tipo === 'bloqueo' ? 'abierto' : 'na'), it.necesitaDe || null, i, it.areaObjectiveId || null, it.fechaProy || null, it.fechaReal || null]
       );
       for (const tg of it.tags || []) {
         const name = norm(tg);
@@ -331,8 +334,8 @@ app.post('/entries/me/add-item', auth, wrap(async (req, res) => {
     const entryId = rows[0].id;
     const { rows: mx } = await c.query(`select coalesce(max(orden),-1)+1 o from items where entry_id=$1`, [entryId]);
     const { rows: ir } = await c.query(
-      `insert into items(entry_id,tipo,texto,estado,necesita_de_area_id,orden,area_objective_id) values($1,$2,$3,$4,$5,$6,$7) returning id`,
-      [entryId, it.tipo, it.texto || '', it.estado || (it.tipo === 'bloqueo' ? 'abierto' : 'na'), it.necesitaDe || null, mx[0].o, it.areaObjectiveId || null]);
+      `insert into items(entry_id,tipo,texto,estado,necesita_de_area_id,orden,area_objective_id,fecha_proy,fecha_real) values($1,$2,$3,$4,$5,$6,$7,$8,$9) returning id`,
+      [entryId, it.tipo, it.texto || '', it.estado || (it.tipo === 'bloqueo' ? 'abierto' : 'na'), it.necesitaDe || null, mx[0].o, it.areaObjectiveId || null, it.fechaProy || null, it.fechaReal || null]);
     for (const tg of it.tags || []) {
       const name = norm(tg);
       const { rows: tr } = await c.query(`insert into tags(name) values($1) on conflict (name) do update set name=excluded.name returning id`, [name]);

@@ -106,6 +106,7 @@ Otras: `tasks` (Mis tareas, personal), `team_members` + `work_tasks` (Modo traba
 | **022** | `work_tasks.estado` (pendiente / en_progreso / hecha) |
 | **023** | `carry.materializado` + limpieza de ítems sin texto |
 | **024** | `audit_log` (historial de cambios) |
+| **025** | `items.fecha_proy` / `items.fecha_real` (fecha proyectada vs. realizada por tarea semanal) |
 
 ---
 

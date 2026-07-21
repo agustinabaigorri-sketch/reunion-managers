@@ -5,6 +5,14 @@ import { TIPOS, lookups, Ring } from '../lib.jsx';
 let cuid = 1;
 const cid = () => 'n' + cuid++;
 const todayStr = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+// Compara la fecha proyectada vs. la realizada y devuelve un chip (a tiempo / con atraso / adelantada).
+function dateDelta(proy, real) {
+  if (!proy || !real) return null;
+  const dias = Math.round((new Date(real + 'T00:00:00') - new Date(proy + 'T00:00:00')) / 86400000);
+  if (dias === 0) return { label: '✓ a tiempo', color: '#1a7a4a', bg: 'var(--eb-green-bg, #eafaf1)' };
+  if (dias > 0) return { label: `+${dias}d de atraso`, color: '#b02a1a', bg: 'var(--red-bg, #fdecec)' };
+  return { label: `${-dias}d antes`, color: '#1F5C99', bg: '#E7F1FB' };
+}
 
 const SHEET_LABEL = { pendiente: 'Marcar estado', resuelto: '✓ Resuelto', sigue: '↻ Sigue', pausado: '⏸ Pausado', cancelado: '✕ Se cayó' };
 const SHEET_OPTS = [
@@ -122,7 +130,7 @@ export default function Semana({ boot, week, weekObj }) {
     base.setUTCDate(base.getUTCDate() + (dir === 'prev' ? -1 : 1));
     try {
       const target = await api.resolveWeek({ date: base.toISOString().slice(0, 10) });
-      await api.addItemToWeek(target.id, { tipo: it.tipo, texto: it.texto, estado: it.estado, necesitaDe: it.necesitaDe, tags: it.tags, areaObjectiveId: it.areaObjectiveId });
+      await api.addItemToWeek(target.id, { tipo: it.tipo, texto: it.texto, estado: it.estado, necesitaDe: it.necesitaDe, tags: it.tags, areaObjectiveId: it.areaObjectiveId, fechaProy: it.fechaProy, fechaReal: it.fechaReal });
       upd((c) => (c.items = c.items.filter((x) => x._k !== it._k)));
     } catch (e) { alert(e.message); }
   };
@@ -361,6 +369,18 @@ export default function Semana({ boot, week, weekObj }) {
                         {objs.map((o) => <option key={o.id} value={o.id}>Q{o.trimestre} · {o.titulo}</option>)}
                       </select>
                     )}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6, flexWrap: 'wrap', fontSize: 11 }}>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: 3, color: 'var(--muted)' }} title="cuándo pensás hacerla">
+                        📅 proyectada
+                        <input type="date" value={it.fechaProy || ''} onChange={(e) => upd((c) => (item(c, it._k).fechaProy = e.target.value || null))} style={{ fontSize: 11, padding: '2px 4px' }} />
+                      </label>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: 3, color: 'var(--muted)' }} title="cuándo la hiciste realmente">
+                        ✓ realizada
+                        <input type="date" value={it.fechaReal || ''} onChange={(e) => upd((c) => (item(c, it._k).fechaReal = e.target.value || null))} style={{ fontSize: 11, padding: '2px 4px' }} />
+                        {!it.fechaReal && <button type="button" className="btn btn-sm btn-ghost" style={{ padding: '0 5px', fontSize: 10 }} title="marcar hoy" onClick={() => upd((c) => (item(c, it._k).fechaReal = todayStr()))}>hoy</button>}
+                      </label>
+                      {(() => { const d = dateDelta(it.fechaProy, it.fechaReal); return d ? <span style={{ fontWeight: 600, color: d.color, background: d.bg, padding: '1px 7px', borderRadius: 20 }}>{d.label}</span> : null; })()}
+                    </div>
                   </div>
                   <select value="" onChange={(e) => { if (e.target.value) moveItem(it, e.target.value); }} title="mover a otra semana" style={{ fontSize: 11, padding: '3px 5px', maxWidth: 120 }}>
                     <option value="">⇄ mover…</option>
@@ -441,14 +461,14 @@ function lev(a, b) {
 function normalize(e) {
   return {
     submitted: !!e.submitted,
-    items: (e.items || []).map((it) => ({ _k: cid(), tipo: it.tipo, texto: it.texto || '', estado: it.estado || 'na', necesitaDe: it.necesitaDe || null, tags: it.tags || [], areaObjectiveId: it.areaObjectiveId || null })),
+    items: (e.items || []).map((it) => ({ _k: cid(), tipo: it.tipo, texto: it.texto || '', estado: it.estado || 'na', necesitaDe: it.necesitaDe || null, tags: it.tags || [], areaObjectiveId: it.areaObjectiveId || null, fechaProy: it.fechaProy || null, fechaReal: it.fechaReal || null })),
     carry: (e.carry || []).map((c) => ({ ...c })),
   };
 }
 function serialize(e) {
   return {
     submitted: e.submitted,
-    items: e.items.map((it) => ({ tipo: it.tipo, texto: it.texto, estado: it.estado, necesitaDe: it.necesitaDe, tags: it.tags, areaObjectiveId: it.areaObjectiveId || null })),
+    items: e.items.map((it) => ({ tipo: it.tipo, texto: it.texto, estado: it.estado, necesitaDe: it.necesitaDe, tags: it.tags, areaObjectiveId: it.areaObjectiveId || null, fechaProy: it.fechaProy || null, fechaReal: it.fechaReal || null })),
     carry: e.carry.map((c) => ({ srcTipo: c.srcTipo, texto: c.texto, status: c.status, necesitaDe: c.necesitaDe, fromItemId: c.fromItemId, resueltoFecha: c.resueltoFecha || null, materializado: c.materializado || false })),
   };
 }
